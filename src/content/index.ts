@@ -1,4 +1,5 @@
-console.info('[Applyance] content script ready');
+import { detectAdapter } from './detect';
+import { loadProfile } from '../shared/storage';
 
 const ELEMENT_ID = 'applyance-profile-gate';
 
@@ -42,4 +43,22 @@ async function checkGate(): Promise<void> {
   document.body?.appendChild(banner);
 }
 
-void checkGate();
+async function runPageFill(): Promise<void> {
+  const data = await chrome.storage.local.get('profileComplete');
+  if (data.profileComplete !== true) {
+    await checkGate();
+    return;
+  }
+
+  const profile = await loadProfile();
+  const adapter = detectAdapter(new URL(window.location.href), document);
+  await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
+}
+
+if (document.readyState === 'complete') {
+  void runPageFill();
+} else {
+  window.addEventListener('load', () => {
+    void runPageFill();
+  });
+}
