@@ -33,7 +33,12 @@ export default [
         HTMLButtonElement: 'readonly',
         HTMLFormElement: 'readonly',
         HTMLInputElement: 'readonly',
+        HTMLTextAreaElement: 'readonly',
+        HTMLSelectElement: 'readonly',
         HTMLElement: 'readonly',
+        Element: 'readonly',
+        Document: 'readonly',
+        Event: 'readonly',
         FormData: 'readonly',
         Blob: 'readonly',
         URL: 'readonly'
