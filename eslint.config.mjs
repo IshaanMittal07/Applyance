@@ -23,7 +23,13 @@ export default [
         window: 'readonly',
         crypto: 'readonly',
         setTimeout: 'readonly',
-        clearTimeout: 'readonly'
+        clearTimeout: 'readonly',
+        TextEncoder: 'readonly',
+        TextDecoder: 'readonly',
+        btoa: 'readonly',
+        atob: 'readonly',
+        CryptoKey: 'readonly',
+        structuredClone: 'readonly'
       }
     },
     plugins: {
