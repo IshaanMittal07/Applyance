@@ -1,6 +1,9 @@
+import { AshbyAdapter } from './adapters/ashby';
 import { GenericAdapter } from './adapters/generic';
 import { GreenhouseAdapter } from './adapters/greenhouse';
+import { IcimsAdapter } from './adapters/icims';
 import { LeverAdapter } from './adapters/lever';
+import { SmartRecruitersAdapter } from './adapters/smartrecruiters';
 import { WorkdayAdapter } from './adapters/workday';
 
 export type AtsAdapter = {
@@ -18,6 +21,18 @@ export function detectAdapter(url: URL, doc: Document): AtsAdapter {
 
   if (hostname.includes('lever')) {
     return new LeverAdapter();
+  }
+
+  if (hostname.includes('ashby')) {
+    return new AshbyAdapter();
+  }
+
+  if (hostname.includes('smartrecruiters')) {
+    return new SmartRecruitersAdapter();
+  }
+
+  if (hostname.includes('icims')) {
+    return new IcimsAdapter();
   }
 
   if (hostname.includes('workday') || hostname.includes('myworkday')) {
