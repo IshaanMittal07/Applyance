@@ -55,6 +55,8 @@ async function runPageFill(): Promise<void> {
   await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
 }
 
+(window as typeof window & { __applyanceFill?: () => Promise<void> }).__applyanceFill = runPageFill;
+
 if (document.readyState === 'complete') {
   void runPageFill();
 } else {

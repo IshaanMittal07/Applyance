@@ -17,12 +17,26 @@ async function render(): Promise<void> {
     return;
   }
 
-  root.innerHTML = '<p>Your profile is ready. Fill this page when you are on an application.</p><button class="primary" type="button">Fill this page</button>';
-  const button = root.querySelector('button');
+  root.innerHTML = '<p>Your profile is ready. Fill this page when you are on an application.</p><button class="primary" type="button">Fill this page</button><button class="secondary" type="button" id="undo-button">Undo</button>';
+  const button = root.querySelector('.primary');
+  const undoButton = root.querySelector('#undo-button');
+
   button?.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab.id) {
-      chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { console.info('[Applyance] fill requested'); } });
+      chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: () => {
+          (window as typeof window & { __applyanceFill?: () => Promise<void> }).__applyanceFill?.();
+        }
+      });
+    }
+  });
+
+  undoButton?.addEventListener('click', async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tab.id) {
+      chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { (window as typeof window & { __applyanceUndo?: () => void }).__applyanceUndo?.(); } });
     }
   });
 }

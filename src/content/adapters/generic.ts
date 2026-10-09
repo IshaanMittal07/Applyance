@@ -21,6 +21,10 @@ export interface AtsAdapter {
 }
 
 function getValueForKey(profile: Profile, key: string): string {
+  if (key === 'customAnswers') {
+    return '';
+  }
+
   const segments = key.split('.');
   let current: unknown = profile;
 
@@ -44,6 +48,16 @@ function getValueForKey(profile: Profile, key: string): string {
     return JSON.stringify(current);
   }
 
+  return '';
+}
+
+function findCustomAnswer(profile: Profile, label: string): string {
+  const normalized = label.toLowerCase().replace(/[^a-z0-9\s]/g, ' ');
+  for (const answer of profile.customAnswers) {
+    if (normalized.includes(answer.questionPattern.toLowerCase().replace(/[^a-z0-9\s]/g, ' '))) {
+      return answer.answer;
+    }
+  }
   return '';
 }
 
@@ -75,10 +89,15 @@ export class GenericAdapter implements AtsAdapter {
         continue;
       }
 
-      const value = getValueForKey(profile, match.key);
+      const customAnswer = findCustomAnswer(profile, field.label);
+      const value = customAnswer || getValueForKey(profile, match.key);
       const currentValue = field.element instanceof HTMLInputElement || field.element instanceof HTMLTextAreaElement || field.element instanceof HTMLSelectElement ? field.element.value : '';
-      if (!value || (!opts.onlyFillEmptyFields && currentValue.trim()) || (opts.onlyFillEmptyFields && currentValue.trim())) {
-        continue;
+      if (!value || currentValue.trim()) {
+        if (!opts.onlyFillEmptyFields && currentValue.trim()) {
+          // Allow a refill action when explicitly requested.
+        } else {
+          continue;
+        }
       }
 
       applyValueToField(field.element, value);
