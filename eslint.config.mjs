@@ -29,7 +29,10 @@ export default [
         btoa: 'readonly',
         atob: 'readonly',
         CryptoKey: 'readonly',
-        structuredClone: 'readonly'
+        structuredClone: 'readonly',
+        HTMLButtonElement: 'readonly',
+        HTMLInputElement: 'readonly',
+        HTMLElement: 'readonly'
       }
     },
     plugins: {
