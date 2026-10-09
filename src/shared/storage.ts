@@ -80,3 +80,11 @@ export async function saveSettings(settings: Partial<Settings>): Promise<void> {
 
   await chrome.storage.local.set({ [STORAGE_KEYS.settings]: { ...DEFAULT_SETTINGS, ...settings } });
 }
+
+export async function clearAllData(): Promise<void> {
+  if (typeof chrome === 'undefined' || !chrome.storage?.local) {
+    return;
+  }
+
+  await chrome.storage.local.clear();
+}

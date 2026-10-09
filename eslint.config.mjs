@@ -31,8 +31,12 @@ export default [
         CryptoKey: 'readonly',
         structuredClone: 'readonly',
         HTMLButtonElement: 'readonly',
+        HTMLFormElement: 'readonly',
         HTMLInputElement: 'readonly',
-        HTMLElement: 'readonly'
+        HTMLElement: 'readonly',
+        FormData: 'readonly',
+        Blob: 'readonly',
+        URL: 'readonly'
       }
     },
     plugins: {
