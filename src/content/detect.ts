@@ -1,6 +1,7 @@
 import { GenericAdapter } from './adapters/generic';
 import { GreenhouseAdapter } from './adapters/greenhouse';
 import { LeverAdapter } from './adapters/lever';
+import { WorkdayAdapter } from './adapters/workday';
 
 export type AtsAdapter = {
   name: string;
@@ -17,6 +18,10 @@ export function detectAdapter(url: URL, doc: Document): AtsAdapter {
 
   if (hostname.includes('lever')) {
     return new LeverAdapter();
+  }
+
+  if (hostname.includes('workday') || hostname.includes('myworkday')) {
+    return new WorkdayAdapter();
   }
 
   return new GenericAdapter(doc);
