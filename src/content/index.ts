@@ -1,66 +1,108 @@
 import { detectAdapter } from './detect';
 import { loadProfile } from '../shared/storage';
+import type { FillReport } from './adapters/generic';
+import { scanFields } from './field-scanner';
+import { matchField } from './matcher';
+import { mountReviewPanel, ReviewPanel } from './review-panel';
+import { restoreAppliedValues } from './fillers';
 
-const ELEMENT_ID = 'applyance-profile-gate';
+const FORM_CONTROL_SELECTOR = 'input:not([type="hidden"]), textarea, select, [role="combobox"], [role="radiogroup"], [role="checkbox"]';
+const PAGE_WINDOW = window as typeof window & {
+  __applyanceContentInstalled?: boolean;
+  __applyanceFill?: () => Promise<FillReport>;
+  __applyanceStop?: () => void;
+};
 
-async function checkGate(): Promise<void> {
-  const data = await chrome.storage.local.get('profileComplete');
-  if (data.profileComplete === true) {
-    return;
+let reviewPanel: ReviewPanel | undefined;
+let totalFilled = 0;
+let needsReview = 0;
+let isFilling = false;
+let fillAgain = false;
+let fillTimer = 0;
+
+function ensureReviewPanel(): ReviewPanel {
+  if (!reviewPanel) {
+    reviewPanel = mountReviewPanel(document);
+    reviewPanel.onUndo(async () => {
+      await restoreAppliedValues();
+      totalFilled = 0;
+      reviewPanel?.update('Autofill undone', { filled: 0, needsReview: 0 });
+    });
   }
-
-  const existing = document.getElementById(ELEMENT_ID);
-  if (existing) {
-    return;
-  }
-
-  const banner = document.createElement('div');
-  banner.id = ELEMENT_ID;
-  banner.style.position = 'fixed';
-  banner.style.bottom = '16px';
-  banner.style.right = '16px';
-  banner.style.zIndex = '2147483647';
-  banner.style.background = '#111827';
-  banner.style.color = '#ffffff';
-  banner.style.padding = '12px 16px';
-  banner.style.borderRadius = '10px';
-  banner.style.fontFamily = 'sans-serif';
-  banner.style.boxShadow = '0 10px 25px rgba(0,0,0,0.2)';
-  banner.style.maxWidth = '320px';
-
-  const text = document.createElement('div');
-  text.textContent = 'Applyance: finish your profile to autofill this page';
-
-  const link = document.createElement('a');
-  link.href = chrome.runtime.getURL('onboarding.html');
-  link.textContent = 'Open setup';
-  link.style.color = '#bfdbfe';
-  link.style.display = 'inline-block';
-  link.style.marginTop = '8px';
-  link.style.textDecoration = 'underline';
-
-  banner.append(text, link);
-  document.body?.appendChild(banner);
+  return reviewPanel;
 }
 
-async function runPageFill(): Promise<void> {
+async function runPageFill(): Promise<FillReport> {
+  if (isFilling) {
+    fillAgain = true;
+    return { filled: 0, needsReview: 0 };
+  }
+
+  const fields = scanFields(document);
+  const matchedFields = fields.filter((field) => matchField(field.label));
+  if (!matchedFields.length) return { filled: 0, needsReview: 0 };
+
+  const panel = ensureReviewPanel();
   const data = await chrome.storage.local.get('profileComplete');
   if (data.profileComplete !== true) {
-    await checkGate();
-    return;
+    panel.update('Application form detected', { filled: 0, needsReview: matchedFields.length });
+    return { filled: 0, needsReview: matchedFields.length };
   }
 
-  const profile = await loadProfile();
-  const adapter = detectAdapter(new URL(window.location.href), document);
-  await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
+  isFilling = true;
+  panel.update('Filling recognized empty fields…', { filled: totalFilled, needsReview });
+  try {
+    const profile = await loadProfile();
+    const adapter = detectAdapter(new URL(window.location.href), document);
+    const result = await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
+    totalFilled += result.filled;
+    needsReview = result.needsReview;
+    panel.update(totalFilled ? 'Review your highlighted information' : 'Application detected; check highlighted fields', { filled: totalFilled, needsReview });
+    return result;
+  } catch {
+    needsReview += 1;
+    panel.update('Some fields could not be filled', { filled: totalFilled, needsReview });
+    return { filled: 0, needsReview };
+  } finally {
+    isFilling = false;
+    if (fillAgain) {
+      fillAgain = false;
+      scheduleFill();
+    }
+  }
 }
 
-(window as typeof window & { __applyanceFill?: () => Promise<void> }).__applyanceFill = runPageFill;
+function nodeHasFormControls(node: unknown): boolean {
+  if (!(node instanceof window.Element) || node.id === 'applyance-review-panel' || node.closest('#applyance-review-panel')) return false;
+  return node.matches(FORM_CONTROL_SELECTOR) || Boolean(node.querySelector(FORM_CONTROL_SELECTOR));
+}
 
-if (document.readyState === 'complete') {
-  void runPageFill();
-} else {
-  window.addEventListener('load', () => {
-    void runPageFill();
+function scheduleFill(): void {
+  window.clearTimeout(fillTimer);
+  fillTimer = window.setTimeout(() => { void runPageFill(); }, 250);
+}
+
+if (!PAGE_WINDOW.__applyanceContentInstalled) {
+  PAGE_WINDOW.__applyanceContentInstalled = true;
+  PAGE_WINDOW.__applyanceFill = runPageFill;
+
+  const observer = new window.MutationObserver((mutations) => {
+    if (mutations.some((mutation) => Array.from(mutation.addedNodes).some(nodeHasFormControls))) {
+      scheduleFill();
+    }
   });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+  PAGE_WINDOW.__applyanceStop = () => {
+    observer.disconnect();
+    window.clearTimeout(fillTimer);
+    PAGE_WINDOW.__applyanceContentInstalled = false;
+  };
+
+  if (document.readyState === 'loading') {
+    window.addEventListener('DOMContentLoaded', scheduleFill, { once: true });
+  } else {
+    scheduleFill();
+  }
+} else {
+  void PAGE_WINDOW.__applyanceFill?.();
 }

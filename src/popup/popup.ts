@@ -55,6 +55,32 @@ async function importChromeFilledAddress(): Promise<number> {
   return importedValues.length;
 }
 
+async function fillActiveTab(tabId: number): Promise<Array<{ filled: number; needsReview: number }>> {
+  const target = { tabId, allFrames: true };
+  try {
+    await chrome.scripting.executeScript({ target, files: ['content/index.js'] });
+  } catch {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ['content/index.js'] });
+  }
+
+  const runFill = async (allFrames: boolean) => chrome.scripting.executeScript({
+    target: allFrames ? target : { tabId },
+    func: async () => {
+      const pageWindow = window as typeof window & { __applyanceFill?: () => Promise<{ filled: number; needsReview: number }> };
+      if (!pageWindow.__applyanceFill) return null;
+      return pageWindow.__applyanceFill();
+    }
+  });
+
+  try {
+    const results = await runFill(true);
+    return results.map((entry) => entry.result).filter((result): result is { filled: number; needsReview: number } => Boolean(result));
+  } catch {
+    const results = await runFill(false);
+    return results.map((entry) => entry.result).filter((result): result is { filled: number; needsReview: number } => Boolean(result));
+  }
+}
+
 function bindAddressImportButton(): void {
   const button = root?.querySelector<HTMLButtonElement>('#import-address-button');
   const status = root?.querySelector<HTMLElement>('#address-import-status');
@@ -91,20 +117,37 @@ async function render(): Promise<void> {
     return;
   }
 
-  root.innerHTML = '<p>Your profile is ready. Fill this page when you are on an application.</p><button class="primary" type="button">Fill this page</button><button class="secondary" type="button" id="undo-button">Undo</button><button class="secondary" type="button" id="edit-profile-button">Edit full profile</button><p class="address-import-hint">Use Chrome Autofill on an application first, then save those address fields here.</p><button class="secondary" type="button" id="import-address-button">Save Chrome-filled address</button><p id="address-import-status" role="status"></p>';
+  root.innerHTML = '<p>Your profile is ready. Fill this page when you are on an application.</p><button class="primary" type="button">Fill this page</button><p id="fill-status" role="status" aria-live="polite"></p><button class="secondary" type="button" id="undo-button">Undo</button><button class="secondary" type="button" id="edit-profile-button">Edit full profile</button><p class="address-import-hint">Use Chrome Autofill on an application first, then save those address fields here.</p><button class="secondary" type="button" id="import-address-button">Save Chrome-filled address</button><p id="address-import-status" role="status"></p>';
   const button = root.querySelector('.primary');
+  const fillStatus = root.querySelector<HTMLElement>('#fill-status');
   const undoButton = root.querySelector('#undo-button');
   const editProfileButton = root.querySelector('#edit-profile-button');
 
   button?.addEventListener('click', async () => {
+    if (!(button instanceof HTMLButtonElement) || !fillStatus) return;
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (tab.id) {
-      chrome.scripting.executeScript({
-        target: { tabId: tab.id },
-        func: () => {
-          (window as typeof window & { __applyanceFill?: () => Promise<void> }).__applyanceFill?.();
-        }
-      });
+    if (!tab.id) {
+      fillStatus.textContent = 'Could not access the active tab. Open the job application and try again.';
+      return;
+    }
+
+    button.disabled = true;
+    fillStatus.textContent = 'Checking the application page…';
+    try {
+      const results = await fillActiveTab(tab.id);
+      if (!results.length) {
+        fillStatus.textContent = 'Applyance could not start on this page. Reload the job page and try again; Chrome blocks extensions on some browser pages.';
+      } else {
+        const filled = results.reduce((total, result) => total + result.filled, 0);
+        const needsReview = results.reduce((total, result) => total + result.needsReview, 0);
+        fillStatus.textContent = filled
+          ? `Filled ${filled} field${filled === 1 ? '' : 's'}. Review them before submitting.${needsReview ? ` ${needsReview} field${needsReview === 1 ? '' : 's'} need review.` : ''}`
+          : `Applyance ran but found no matching empty fields${needsReview ? `; ${needsReview} need review` : ''}. Check the field labels and that this is an application form.`;
+      }
+    } catch (error) {
+      fillStatus.textContent = error instanceof Error ? error.message : 'Could not fill this page. Check the extension permissions and reload the job page.';
+    } finally {
+      button.disabled = false;
     }
   });
 
