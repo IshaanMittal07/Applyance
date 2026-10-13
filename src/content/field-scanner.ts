@@ -4,6 +4,18 @@ export interface ScannedField {
   value: string;
 }
 
+const AUTOCOMPLETE_LABELS: Record<string, string> = {
+  'street-address': 'street address',
+  'address-line1': 'address line 1',
+  'address-line2': 'address line 2',
+  'address-level1': 'state province region',
+  'address-level2': 'city town',
+  'address-level3': 'county',
+  'postal-code': 'postal code zip code',
+  'country-name': 'country',
+  country: 'country'
+};
+
 function isHidden(element: HTMLElement): boolean {
   if (!element.isConnected) {
     return true;
@@ -23,45 +35,51 @@ function isHidden(element: HTMLElement): boolean {
 }
 
 function getLabelText(element: HTMLElement): string {
+  const autocompleteLabel = (element.getAttribute('autocomplete') ?? '')
+    .split(/\s+/)
+    .map((token) => AUTOCOMPLETE_LABELS[token])
+    .filter(Boolean)
+    .join(' ');
+  const withAutocomplete = (label: string): string => [label, autocompleteLabel].filter(Boolean).join(' ').trim();
   const directLabel = element.closest('label');
   if (directLabel && directLabel.textContent) {
-    return directLabel.textContent.trim();
+    return withAutocomplete(directLabel.textContent.trim());
   }
 
   const ariaLabel = element.getAttribute('aria-label');
   if (ariaLabel) {
-    return ariaLabel.trim();
+    return withAutocomplete(ariaLabel.trim());
   }
 
   const ariaLabelledby = element.getAttribute('aria-labelledby');
   if (ariaLabelledby) {
     const id = ariaLabelledby.split(' ').map((part) => document.getElementById(part)?.textContent).filter(Boolean).join(' ');
     if (id) {
-      return id.trim();
+      return withAutocomplete(id.trim());
     }
   }
 
   const placeholder = element.getAttribute('placeholder');
   if (placeholder) {
-    return placeholder.trim();
+    return withAutocomplete(placeholder.trim());
   }
 
   const name = element.getAttribute('name');
   if (name) {
-    return name.trim();
+    return withAutocomplete(name.trim());
   }
 
   const id = element.getAttribute('id');
   if (id) {
-    return id.trim();
+    return withAutocomplete(id.trim());
   }
 
   const automation = element.getAttribute('data-automation-id') ?? element.getAttribute('data-qa');
   if (automation) {
-    return automation.trim();
+    return withAutocomplete(automation.trim());
   }
 
-  return '';
+  return autocompleteLabel;
 }
 
 export function scanFields(root: Document | Element = document): ScannedField[] {
