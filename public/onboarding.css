@@ -342,6 +342,12 @@ h3 {
   font-size: 13px;
 }
 
+.notice.resume-import-error {
+  border-left-color: #b44848;
+  color: #852f2f;
+  background: #fff1f0;
+}
+
 .muted {
   color: var(--muted);
   font-size: 13px;

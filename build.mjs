@@ -7,6 +7,7 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 const distDir = join(rootDir, 'dist');
 const publicDir = join(rootDir, 'public');
 const srcDir = join(rootDir, 'src');
+const dependenciesDir = join(rootDir, 'node_modules');
 
 const copyRecursive = (source, target) => {
   mkdirSync(target, { recursive: true });
@@ -47,6 +48,14 @@ const buildExtension = async () => {
   if (existsSync(publicDir)) {
     copyRecursive(publicDir, distDir);
   }
+
+  cpSync(join(dependenciesDir, 'mammoth', 'mammoth.browser.min.js'), join(distDir, 'mammoth.browser.min.js'));
+  cpSync(join(dependenciesDir, 'pdfjs-dist', 'legacy', 'build', 'pdf.worker.min.mjs'), join(distDir, 'pdf.worker.min.mjs'));
+
+  const licensesDir = join(distDir, 'licenses');
+  mkdirSync(licensesDir, { recursive: true });
+  cpSync(join(dependenciesDir, 'mammoth', 'LICENSE'), join(licensesDir, 'mammoth-LICENSE'));
+  cpSync(join(dependenciesDir, 'pdfjs-dist', 'LICENSE'), join(licensesDir, 'pdfjs-dist-LICENSE'));
 };
 
 await buildExtension();

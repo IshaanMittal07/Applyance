@@ -17,13 +17,19 @@ const base64ToBytes = (value: string): Uint8Array => {
   return bytes;
 };
 
+const toArrayBuffer = (bytes: Uint8Array): ArrayBuffer => {
+  const copy = new Uint8Array(bytes.byteLength);
+  copy.set(bytes);
+  return copy.buffer;
+};
+
 export async function deriveKey(passphrase: string, salt: Uint8Array): Promise<CryptoKey> {
   const encoder = TEXT_ENCODER;
   const keyMaterial = await crypto.subtle.importKey('raw', encoder.encode(passphrase), 'PBKDF2', false, ['deriveKey']);
   return crypto.subtle.deriveKey(
     {
       name: 'PBKDF2',
-      salt,
+      salt: toArrayBuffer(salt),
       iterations: 310000,
       hash: 'SHA-256'
     },
@@ -38,7 +44,7 @@ export async function encryptVault(payload: string, passphrase: string): Promise
   const salt = crypto.getRandomValues(new Uint8Array(16));
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const key = await deriveKey(passphrase, salt);
-  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, TEXT_ENCODER.encode(payload));
+  const encrypted = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: toArrayBuffer(iv) }, key, TEXT_ENCODER.encode(payload));
 
   return {
     ciphertext: bytesToBase64(new Uint8Array(encrypted)),
@@ -50,9 +56,9 @@ export async function encryptVault(payload: string, passphrase: string): Promise
 export async function decryptVault(payload: { ciphertext: string; salt: string; iv: string }, passphrase: string): Promise<string> {
   const key = await deriveKey(passphrase, base64ToBytes(payload.salt));
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: base64ToBytes(payload.iv) },
+    { name: 'AES-GCM', iv: toArrayBuffer(base64ToBytes(payload.iv)) },
     key,
-    base64ToBytes(payload.ciphertext)
+    toArrayBuffer(base64ToBytes(payload.ciphertext))
   );
 
   return new TextDecoder().decode(decrypted);

@@ -1,4 +1,6 @@
 import { DEFAULT_PROFILE, EducationRecord, ExperienceRecord, Profile, migrateProfile } from '../shared/profile-schema';
+import { extractResumeText } from '../shared/resume-reader';
+import { parseResumeText, ResumeSuggestions } from '../shared/resume-text-parser';
 import { getProfileComplete, loadDraft, loadProfile, saveDraft, saveProfile, setProfileComplete } from '../shared/storage';
 
 type WizardStep = {
@@ -11,12 +13,12 @@ type WizardStep = {
 const root = document.querySelector<HTMLElement>('#app');
 const escapeHtml = (value: unknown): string => String(value ?? '').replace(/[&<>"']/g, (character) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[character] ?? character);
 
-function field(label: string, name: string, value = '', type = 'text', hint = ''): string {
-  return `<label class="field"><span>${label}</span><input data-field="${escapeHtml(name)}" type="${type}" value="${escapeHtml(value)}" ${hint ? `placeholder="${escapeHtml(hint)}"` : ''}></label>`;
+function field(label: string, name: string, value = '', type = 'text', hint = '', autocomplete = ''): string {
+  return `<label class="field"><span>${label}</span><input data-field="${escapeHtml(name)}" name="${escapeHtml(name)}" type="${type}" value="${escapeHtml(value)}" ${autocomplete ? `autocomplete="${autocomplete}"` : ''} ${hint ? `placeholder="${escapeHtml(hint)}"` : ''}></label>`;
 }
 
-function selectField(label: string, name: string, value: string, options: string[]): string {
-  return `<label class="field"><span>${label}</span><select data-field="${escapeHtml(name)}"><option value="">Choose an answer</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${value === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></label>`;
+function selectField(label: string, name: string, value: string, options: string[], autocomplete = ''): string {
+  return `<label class="field"><span>${label}</span><select data-field="${escapeHtml(name)}" name="${escapeHtml(name)}" ${autocomplete ? `autocomplete="${autocomplete}"` : ''}><option value="">Choose an answer</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${value === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}</select></label>`;
 }
 
 const OTHER_LOCATION = '__other__';
@@ -26,16 +28,18 @@ const REGION_OPTIONS: Record<string, string[]> = {
   Canada: ['Alberta', 'British Columbia', 'Manitoba', 'New Brunswick', 'Newfoundland and Labrador', 'Northwest Territories', 'Nova Scotia', 'Nunavut', 'Ontario', 'Prince Edward Island', 'Quebec', 'Saskatchewan', 'Yukon'],
   'United States': ['Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado', 'Connecticut', 'Delaware', 'District of Columbia', 'Florida', 'Georgia', 'Hawaii', 'Idaho', 'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana', 'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota', 'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada', 'New Hampshire', 'New Jersey', 'New Mexico', 'New York', 'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon', 'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota', 'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington', 'West Virginia', 'Wisconsin', 'Wyoming']
 };
+const REGION_CHOICES = Array.from(new Set(Object.values(REGION_OPTIONS).flat())).sort();
 const CITY_OPTIONS: Record<string, string[]> = {
   Canada: ['Brampton', 'Calgary', 'Edmonton', 'Halifax', 'Hamilton', 'Kitchener', 'London', 'Markham', 'Milton', 'Mississauga', 'Montreal', 'Ottawa', 'Quebec City', 'Regina', 'Saskatoon', 'Surrey', 'Toronto', 'Vancouver', 'Victoria', 'Waterloo', 'Windsor', 'Winnipeg'],
   'United States': ['Atlanta', 'Austin', 'Baltimore', 'Boston', 'Charlotte', 'Chicago', 'Columbus', 'Dallas', 'Denver', 'Detroit', 'Honolulu', 'Houston', 'Indianapolis', 'Jacksonville', 'Las Vegas', 'Los Angeles', 'Miami', 'Minneapolis', 'Nashville', 'New York City', 'Philadelphia', 'Phoenix', 'Pittsburgh', 'Portland', 'Raleigh', 'Sacramento', 'San Antonio', 'San Diego', 'San Francisco', 'San Jose', 'Seattle', 'Tampa', 'Washington']
 };
+const CITY_CHOICES = Array.from(new Set(Object.values(CITY_OPTIONS).flat())).sort();
 
-function locationField(label: string, name: string, value: string, options: string[]): string {
+function locationField(label: string, name: string, value: string, options: string[], autocomplete: string): string {
   const useOther = otherLocationFields.has(name) || Boolean(value && !options.includes(value));
   if (useOther) otherLocationFields.add(name);
   const choice = useOther ? OTHER_LOCATION : value;
-  return `<label class="field"><span>${label}</span><select data-location-select="${escapeHtml(name)}"><option value="">Choose ${escapeHtml(label.toLowerCase())}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${choice === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}<option value="${OTHER_LOCATION}" ${choice === OTHER_LOCATION ? 'selected' : ''}>Other / enter manually</option></select><input data-field="${escapeHtml(name)}.other" value="${escapeHtml(useOther ? value : '')}" placeholder="Enter ${escapeHtml(label.toLowerCase())}" ${useOther ? '' : 'hidden'}></label>`;
+  return `<label class="field"><span>${label}</span><select data-location-select="${escapeHtml(name)}" name="${escapeHtml(name)}" autocomplete="${autocomplete}"><option value="">Choose ${escapeHtml(label.toLowerCase())}</option>${options.map((option) => `<option value="${escapeHtml(option)}" ${choice === option ? 'selected' : ''}>${escapeHtml(option)}</option>`).join('')}<option value="${OTHER_LOCATION}" ${choice === OTHER_LOCATION ? 'selected' : ''}>Other / enter manually</option></select><input data-field="${escapeHtml(name)}.other" data-location-other="${escapeHtml(name)}" name="${escapeHtml(name)}-other" value="${escapeHtml(useOther ? value : '')}" placeholder="Enter ${escapeHtml(label.toLowerCase())}" ${useOther ? '' : 'hidden'}></label>`;
 }
 
 function textareaField(label: string, name: string, value = '', hint = ''): string {
@@ -66,6 +70,40 @@ function blankEducation(): EducationRecord {
 
 function blankExperience(): ExperienceRecord {
   return { company: '', title: '', startMonth: '', startYear: '', current: false, description: '' };
+}
+
+function mergeResumeSuggestions(profile: Profile, suggestions: ResumeSuggestions): { fields: number; skills: number; education: number; experience: number } {
+  let fields = 0;
+  for (const key of ['firstName', 'middleName', 'lastName', 'email', 'phone'] as const) {
+    const value = suggestions.personal[key]?.trim();
+    if (value && !profile.personal[key]?.trim()) {
+      profile.personal[key] = value;
+      fields += 1;
+    }
+  }
+  for (const key of ['linkedin', 'github', 'portfolio'] as const) {
+    const value = suggestions.links[key]?.trim();
+    if (value && !profile.links[key]?.trim()) {
+      profile.links[key] = value;
+      fields += 1;
+    }
+  }
+
+  const existingSkills = new Set(profile.skills.map((skill) => skill.toLowerCase()));
+  const newSkills = suggestions.skills.filter((skill) => !existingSkills.has(skill.toLowerCase()));
+  profile.skills = [...profile.skills, ...newSkills];
+
+  const newEducation = suggestions.education.filter((entry) => !profile.education.some((existing) =>
+    existing.school.toLowerCase() === entry.school.toLowerCase() && existing.startDate === entry.startDate
+  ));
+  profile.education.push(...newEducation);
+
+  const newExperience = suggestions.experience.filter((entry) => !profile.experience.some((existing) =>
+    existing.company.toLowerCase() === entry.company.toLowerCase() && existing.title.toLowerCase() === entry.title.toLowerCase() && existing.startYear === entry.startYear
+  ));
+  profile.experience.push(...newExperience);
+
+  return { fields, skills: newSkills.length, education: newEducation.length, experience: newExperience.length };
 }
 
 function renderEducation(entries: EducationRecord[]): string {
@@ -119,35 +157,43 @@ function renderCustomAnswers(profile: Profile): string {
 
 const steps: WizardStep[] = [
   {
+    title: 'Import your resume',
+    description: 'Optionally extract details from a PDF, Word document, or text resume. The file is read locally and is not saved or uploaded.',
+    render: () => `<div class="section-block"><label class="field field-wide"><span>Resume file</span><input id="resume-file" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"></label>
+      <p class="notice">Recognized contact details, links, skills, education, and work history are added only where possible. Review and correct everything in the next steps. Scanned image PDFs are not supported.</p>
+      <div id="resume-import-status" class="notice" role="status" hidden></div></div>`,
+    collect: () => undefined
+  },
+  {
     title: 'Personal details',
     description: 'Add the contact details you want to use on applications.',
     render: (profile) => `
       <div class="section-block"><h3>Name and contact</h3><div class="field-grid">
-        ${field('First name *', 'firstName', profile.personal.firstName)}
-        ${field('Middle name', 'middleName', profile.personal.middleName ?? '')}
-        ${field('Last name *', 'lastName', profile.personal.lastName)}
+        ${field('First name *', 'firstName', profile.personal.firstName, 'text', '', 'given-name')}
+        ${field('Middle name', 'middleName', profile.personal.middleName ?? '', 'text', '', 'additional-name')}
+        ${field('Last name *', 'lastName', profile.personal.lastName, 'text', '', 'family-name')}
         ${field('Preferred first name', 'preferredName', profile.personal.preferredName ?? '')}
         ${field('Preferred middle name', 'preferredMiddleName', profile.personal.preferredMiddleName ?? '')}
         ${field('Preferred last name', 'preferredLastName', profile.personal.preferredLastName ?? '')}
-        ${field('Email address *', 'email', profile.personal.email, 'email')}
+        ${field('Email address *', 'email', profile.personal.email, 'email', '', 'email')}
         ${selectField('Phone type', 'phoneType', profile.personal.phoneType ?? '', ['Mobile', 'Home', 'Work'])}
-        ${field('Phone *', 'phone', profile.personal.phone, 'tel')}
+        ${field('Phone *', 'phone', profile.personal.phone, 'tel', '', 'tel')}
         ${field('Country calling code', 'phoneCountryCode', profile.personal.phoneCountryCode, 'text', 'e.g. +1')}
         ${selectField('Pronouns', 'pronouns', profile.personal.pronouns ?? '', ['She/her', 'He/him', 'They/them', 'Use my name', 'Decline to answer'])}
       </div></div>
       <div class="section-block"><h3>Address</h3><div class="field-grid">
-        ${field('Address line', 'address.line1', profile.personal.address.line1)}
-        ${field('Apartment / unit', 'address.line2', profile.personal.address.line2 ?? '')}
-        ${locationField('Country', 'address.country', profile.personal.address.country, COUNTRY_OPTIONS)}
-        ${locationField('State / province', 'address.stateOrProvince', profile.personal.address.stateOrProvince, REGION_OPTIONS[profile.personal.address.country] ?? [])}
-        ${locationField('City', 'address.city', profile.personal.address.city, CITY_OPTIONS[profile.personal.address.country] ?? [])}
-        ${field('County / region', 'address.county', profile.personal.address.county ?? '')}
-        ${field('Postal code', 'address.postalCode', profile.personal.address.postalCode)}
+        ${field('Address line', 'address.line1', profile.personal.address.line1, 'text', '', 'address-line1')}
+        ${field('Apartment / unit', 'address.line2', profile.personal.address.line2 ?? '', 'text', '', 'address-line2')}
+        ${locationField('Country', 'address.country', profile.personal.address.country, COUNTRY_OPTIONS, 'country-name')}
+        ${locationField('State / province', 'address.stateOrProvince', profile.personal.address.stateOrProvince, REGION_CHOICES, 'address-level1')}
+        ${locationField('City', 'address.city', profile.personal.address.city, CITY_CHOICES, 'address-level2')}
+        ${field('County / region', 'address.county', profile.personal.address.county ?? '', 'text', '', 'address-level3')}
+        ${field('Postal code', 'address.postalCode', profile.personal.address.postalCode, 'text', '', 'postal-code')}
       </div></div>
       <div class="section-block"><h3>Online profiles</h3><div class="field-grid">
-        ${field('LinkedIn URL', 'linkedin', profile.links.linkedin ?? '', 'url')}
-        ${field('GitHub URL', 'github', profile.links.github ?? '', 'url')}
-        ${field('Website / portfolio URL', 'portfolio', profile.links.portfolio ?? '', 'url')}
+        ${field('LinkedIn URL', 'linkedin', profile.links.linkedin ?? '', 'url', '', 'url')}
+        ${field('GitHub URL', 'github', profile.links.github ?? '', 'url', '', 'url')}
+        ${field('Website / portfolio URL', 'portfolio', profile.links.portfolio ?? '', 'url', '', 'url')}
       </div></div>`,
     collect: (profile) => {
       profile.personal = {
@@ -306,11 +352,45 @@ async function renderWizard(): Promise<void> {
     root.innerHTML = `
       <header class="wizard-header"><a class="brand" href="#" aria-label="Applyance setup home"><img class="brand-icon" src="icons/icon32.png" width="36" height="36" alt=""><span>Applyance</span></a><span class="step-count">STEP ${stepIndex + 1} OF ${steps.length}</span></header>
       <div class="progress-track" aria-label="Setup progress"><span style="width:${progress}%"></span></div>
-      <section class="wizard-content"><p class="eyebrow">PROFILE SETUP</p><h1>${step.title}</h1><p class="step-description">${step.description}</p>
+      <form class="wizard-form" autocomplete="on"><section class="wizard-content"><p class="eyebrow">PROFILE SETUP</p><h1>${step.title}</h1><p class="step-description">${step.description}</p>
         <div class="validation-message" role="alert" hidden></div>
         ${step.render(profile)}
         <footer class="wizard-actions">${stepIndex > 0 ? '<button type="button" class="button button-secondary" data-action="back">Back</button>' : '<span></span>'}<button type="button" class="button button-primary" data-action="next">${stepIndex === steps.length - 1 ? 'Save profile' : 'Continue'}</button></footer>
-      </section>`;
+      </section></form>`;
+
+    root.querySelector<HTMLFormElement>('.wizard-form')?.addEventListener('submit', (event) => event.preventDefault());
+
+    const resumeInput = root.querySelector<HTMLInputElement>('#resume-file');
+    resumeInput?.addEventListener('change', async () => {
+      const file = resumeInput.files?.[0];
+      const status = root.querySelector<HTMLElement>('#resume-import-status');
+      if (!file || !status) return;
+      status.hidden = false;
+      status.textContent = 'Reading the resume on this device…';
+      status.classList.remove('resume-import-error');
+
+      try {
+        const text = await extractResumeText(file);
+        const extracted = mergeResumeSuggestions(profile, parseResumeText(text));
+        const categories = [
+          extracted.fields ? `${extracted.fields} contact/link fields` : '',
+          extracted.skills ? `${extracted.skills} skills` : '',
+          extracted.education ? `${extracted.education} education entries` : '',
+          extracted.experience ? `${extracted.experience} work entries` : ''
+        ].filter(Boolean);
+        if (!categories.length) {
+          status.textContent = 'No recognizable details were found. Try a text-based PDF or DOCX, or continue and enter details manually.';
+        } else {
+          await saveDraft(profile);
+          status.textContent = `Imported ${categories.join(', ')}. Continue to review and edit them.`;
+        }
+      } catch (error) {
+        status.classList.add('resume-import-error');
+        status.textContent = error instanceof Error ? error.message : 'The resume could not be read.';
+      } finally {
+        resumeInput.value = '';
+      }
+    });
 
     root.querySelector('[data-action="back"]')?.addEventListener('click', () => {
       collectCurrentStep();
@@ -322,7 +402,7 @@ async function renderWizard(): Promise<void> {
     root.querySelector('[data-action="next"]')?.addEventListener('click', async () => {
       const message = root.querySelector<HTMLElement>('.validation-message');
       const requiredPersonal = ['firstName', 'lastName', 'email', 'phone'];
-      if (stepIndex === 0 && requiredPersonal.some((name) => !readValue(name))) {
+      if (step.title === 'Personal details' && requiredPersonal.some((name) => !readValue(name))) {
         if (message) {
           message.hidden = false;
           message.textContent = 'Enter your first name, last name, email, and phone to continue.';
@@ -355,44 +435,11 @@ async function renderWizard(): Promise<void> {
 
     root.querySelectorAll<HTMLSelectElement>('[data-location-select]').forEach((select) => select.addEventListener('change', () => {
       const name = select.dataset.locationSelect ?? '';
-      const address = profile.personal.address;
-      if (select.value === OTHER_LOCATION) {
-        otherLocationFields.add(name);
-        if (name === 'address.country') {
-          otherLocationFields.add('address.stateOrProvince');
-          otherLocationFields.add('address.city');
-        }
-        collectCurrentStep();
-        if (name === 'address.country') {
-          address.country = '';
-          address.stateOrProvince = '';
-          address.city = '';
-        } else if (name === 'address.stateOrProvince') {
-          address.stateOrProvince = '';
-          address.city = '';
-          otherLocationFields.add('address.city');
-        } else {
-          address.city = '';
-        }
-        render();
-        return;
-      }
-
-      otherLocationFields.delete(name);
-      const previousValue = name === 'address.country' ? address.country : name === 'address.stateOrProvince' ? address.stateOrProvince : address.city;
-      collectCurrentStep();
-      if (name === 'address.country' && select.value !== previousValue) {
-        address.country = select.value;
-        address.stateOrProvince = '';
-        address.city = '';
-        otherLocationFields.delete('address.stateOrProvince');
-        otherLocationFields.delete('address.city');
-      } else if (name === 'address.stateOrProvince' && select.value !== previousValue) {
-        address.stateOrProvince = select.value;
-        address.city = '';
-        otherLocationFields.delete('address.city');
-      }
-      render();
+      const fallback = select.parentElement?.querySelector<HTMLInputElement>(`[data-location-other="${name}"]`);
+      const isOther = select.value === OTHER_LOCATION;
+      if (isOther) otherLocationFields.add(name);
+      else otherLocationFields.delete(name);
+      if (fallback) fallback.hidden = !isOther;
     }));
 
     root.querySelectorAll<HTMLButtonElement>('[data-add]').forEach((button) => button.addEventListener('click', () => {

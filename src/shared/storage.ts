@@ -27,7 +27,7 @@ async function getStorageArea<T>(key: string, fallback: T): Promise<T> {
   }
 
   const value = await chrome.storage.local.get(key);
-  return value[key] ?? fallback;
+  return (value[key] as T | undefined) ?? fallback;
 }
 
 export async function loadProfile(): Promise<Profile> {

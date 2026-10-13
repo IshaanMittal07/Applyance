@@ -55,6 +55,8 @@ export interface ExperienceRecord {
   startYear: string;
   endMonth?: string;
   endYear?: string;
+  startDate?: string;
+  endDate?: string;
   current: boolean;
   description: string;
 }
@@ -182,6 +184,13 @@ export const DEFAULT_PROFILE: Profile = {
   }
 };
 
+type ProfileMigrationInput = Omit<Partial<Profile>, 'workAuthorization'> & {
+  workAuthorization?: Omit<Partial<WorkAuthorization>, 'authorizedToWorkIn' | 'requiresSponsorshipIn'> & {
+    authorizedToWorkIn?: Record<string, string | boolean>;
+    requiresSponsorshipIn?: Record<string, string | boolean>;
+  };
+};
+
 function migrateAnswerMap(defaults: Record<string, string>, values?: Record<string, unknown>): Record<string, string> {
   const answers = { ...defaults };
   for (const [country, answer] of Object.entries(values ?? {})) {
@@ -198,7 +207,7 @@ function legacyMonthDate(month?: string, year?: string): string {
   return `${year}-${monthNumber}`;
 }
 
-export function migrateProfile(value: Partial<Profile> | null | undefined): Profile {
+export function migrateProfile(value: ProfileMigrationInput | null | undefined): Profile {
   const base: Profile = JSON.parse(JSON.stringify(DEFAULT_PROFILE));
   if (!value) {
     return base;
