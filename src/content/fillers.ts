@@ -1,4 +1,4 @@
-const restoreMap = new WeakMap<HTMLElement, string>();
+const restoreMap = new Map<HTMLElement, string>();
 
 export function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   if (!restoreMap.has(element)) {
@@ -32,6 +32,17 @@ export function setSelectValue(element: HTMLSelectElement, value: string): void 
 }
 
 export function applyValueToField(element: HTMLElement, value: string): boolean {
+  if (element instanceof HTMLInputElement && element.type === 'checkbox') {
+    const checked = value.toLowerCase() === 'true' || value.toLowerCase() === 'yes';
+    if (!restoreMap.has(element)) {
+      restoreMap.set(element, `checked:${element.checked}`);
+    }
+    element.checked = checked;
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+    element.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
   if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
     setInputValue(element, value);
     return true;
@@ -43,10 +54,14 @@ export function applyValueToField(element: HTMLElement, value: string): boolean 
   }
 
   if ((element as HTMLElement).getAttribute('role') === 'checkbox') {
+    const checked = value.toLowerCase() === 'true' || value.toLowerCase() === 'yes';
+    const current = element.getAttribute('aria-checked') === 'true';
     if (!restoreMap.has(element)) {
-      restoreMap.set(element, element.getAttribute('aria-checked') ?? 'false');
+      restoreMap.set(element, `checked:${current}`);
     }
-    (element as HTMLElement).click();
+    if (current !== checked) {
+      element.click();
+    }
     return true;
   }
 
@@ -56,7 +71,14 @@ export function applyValueToField(element: HTMLElement, value: string): boolean 
 export function restoreAppliedValues(): void {
   const entries = Array.from(restoreMap.entries());
   for (const [element, previousValue] of entries) {
-    if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    if ((element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) || element.getAttribute('role') === 'checkbox') {
+      const wasChecked = previousValue === 'checked:true';
+      if (element instanceof HTMLInputElement) {
+        element.checked = wasChecked;
+      } else if ((element.getAttribute('aria-checked') === 'true') !== wasChecked) {
+        element.click();
+      }
+    } else if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
       const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
       if (descriptor && descriptor.set) {
         descriptor.set.call(element, previousValue);

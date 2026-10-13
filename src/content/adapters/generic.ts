@@ -20,7 +20,7 @@ export interface AtsAdapter {
   fillPage(profile: Profile, opts?: FillOptions): Promise<FillReport>;
 }
 
-function getValueForKey(profile: Profile, key: string): string {
+function getValueForKey(profile: Profile, key: string, occurrence: number): string {
   if (key === 'customAnswers') {
     return '';
   }
@@ -29,6 +29,9 @@ function getValueForKey(profile: Profile, key: string): string {
   let current: unknown = profile;
 
   for (const segment of segments) {
+    if (Array.isArray(current)) {
+      current = current[occurrence];
+    }
     if (current && typeof current === 'object' && segment in (current as Record<string, unknown>)) {
       current = (current as Record<string, unknown>)[segment];
     } else {
@@ -38,6 +41,10 @@ function getValueForKey(profile: Profile, key: string): string {
 
   if (typeof current === 'string') {
     return current;
+  }
+
+  if (typeof current === 'boolean') {
+    return String(current);
   }
 
   if (Array.isArray(current)) {
@@ -64,7 +71,7 @@ function findCustomAnswer(profile: Profile, label: string): string {
 export class GenericAdapter implements AtsAdapter {
   public name = 'generic';
 
-  public constructor(private readonly doc: Document = document) {}
+  public constructor(private readonly doc: Document | Element = document) {}
 
   public matches(_url: URL, _doc: Document): boolean {
     return true;
@@ -75,6 +82,7 @@ export class GenericAdapter implements AtsAdapter {
     const fields = scanFields(this.doc);
     let filled = 0;
     let needsReview = 0;
+    const occurrences = new Map<string, number>();
     const highlightEntries: Array<{ element: HTMLElement; status: 'filled' | 'review' }> = [];
 
     for (const field of fields) {
@@ -83,6 +91,9 @@ export class GenericAdapter implements AtsAdapter {
         continue;
       }
 
+      const occurrence = occurrences.get(match.key) ?? 0;
+      occurrences.set(match.key, occurrence + 1);
+
       if (match.confidence < threshold) {
         needsReview += 1;
         highlightEntries.push({ element: field.element, status: 'review' });
@@ -90,8 +101,12 @@ export class GenericAdapter implements AtsAdapter {
       }
 
       const customAnswer = findCustomAnswer(profile, field.label);
-      const value = customAnswer || getValueForKey(profile, match.key);
-      const currentValue = field.element instanceof HTMLInputElement || field.element instanceof HTMLTextAreaElement || field.element instanceof HTMLSelectElement ? field.element.value : '';
+      const value = customAnswer || getValueForKey(profile, match.key, occurrence);
+      const currentValue = field.element instanceof HTMLInputElement && field.element.type === 'checkbox'
+        ? (field.element.checked ? 'true' : '')
+        : field.element instanceof HTMLInputElement || field.element instanceof HTMLTextAreaElement || field.element instanceof HTMLSelectElement
+          ? field.element.value
+          : '';
       if (!value || currentValue.trim()) {
         if (!opts.onlyFillEmptyFields && currentValue.trim()) {
           // Allow a refill action when explicitly requested.

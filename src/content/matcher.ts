@@ -28,7 +28,8 @@ export function matchField(label: string): FieldMatch | null {
       continue;
     }
 
-    const confidence = Math.min(0.99, 0.7 + matches.length * 0.1);
+    const specificity = Math.max(...matches.map((pattern) => pattern.length));
+    const confidence = Math.min(0.99, 0.7 + specificity * 0.01 + matches.length * 0.03);
     if (!best || confidence > best.confidence) {
       best = { key, confidence };
     }
