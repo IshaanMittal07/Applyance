@@ -1,37 +1,120 @@
 const restoreMap = new Map<HTMLElement, string>();
 
+function setTextValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
+  const prototype = element instanceof HTMLInputElement ? window.HTMLInputElement.prototype : window.HTMLTextAreaElement.prototype;
+  const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
+  if (descriptor?.set) {
+    descriptor.set.call(element, value);
+  } else {
+    element.value = value;
+  }
+}
+
 export function setInputValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
   if (!restoreMap.has(element)) {
     restoreMap.set(element, element.value);
   }
 
-  const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-  if (descriptor && descriptor.set) {
-    descriptor.set.call(element, value);
-  } else {
-    element.value = value;
-  }
+  setTextValue(element, value);
 
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
   element.dispatchEvent(new Event('blur', { bubbles: true }));
 }
 
-export function setSelectValue(element: HTMLSelectElement, value: string): void {
+export function setSelectValue(element: HTMLSelectElement, value: string): boolean {
+  const options = Array.from(element.options);
+  const desired = normalizeOption(value);
+  const option = options.find((candidate) => normalizeOption(candidate.label) === desired)
+    ?? options.find((candidate) => normalizeOption(candidate.value) === desired)
+    ?? findUniquePrefix(options, (candidate) => normalizeOption(candidate.label), desired);
+  if (!option) {
+    return false;
+  }
+
   if (!restoreMap.has(element)) {
     restoreMap.set(element, element.value);
   }
-
-  const option = Array.from(element.options).find((candidate) => candidate.text.toLowerCase() === value.toLowerCase() || candidate.text.toLowerCase().includes(value.toLowerCase()));
-  if (!option) {
-    return;
-  }
-
   element.value = option.value;
   element.dispatchEvent(new Event('change', { bubbles: true }));
+  return true;
 }
 
-export function applyValueToField(element: HTMLElement, value: string): boolean {
+function normalizeOption(value: string): string {
+  return value.normalize('NFKD').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+}
+
+function findUniquePrefix<T>(items: T[], getText: (item: T) => string, desired: string): T | undefined {
+  const matches = items.filter((item) => getText(item).startsWith(desired));
+  return matches.length === 1 ? matches[0] : undefined;
+}
+
+function listboxOptions(element: HTMLElement): HTMLElement[] {
+  const controlledIds = [element.getAttribute('aria-controls'), element.getAttribute('aria-owns')]
+    .filter(Boolean)
+    .flatMap((value) => (value ?? '').split(/\s+/));
+  const controlledRoots = controlledIds.map((id) => element.ownerDocument.getElementById(id)).filter((root): root is HTMLElement => root instanceof HTMLElement);
+  const roots = controlledRoots.length
+    ? controlledRoots
+    : Array.from(element.ownerDocument.querySelectorAll<HTMLElement>('[role="listbox"], [role="menu"]'))
+      .filter((root) => !root.hidden && root.getAttribute('aria-hidden') !== 'true');
+  return roots.flatMap((root) => Array.from(root.querySelectorAll<HTMLElement>('[role="option"], [role="menuitemradio"]')))
+    .filter((option) => !option.hidden && option.getAttribute('aria-disabled') !== 'true' && option.getAttribute('aria-hidden') !== 'true');
+}
+
+async function setComboboxValue(element: HTMLElement, value: string): Promise<boolean> {
+  const trigger = element.matches('button, [role="button"], [aria-haspopup="listbox"]')
+    ? element
+    : element.querySelector<HTMLElement>('button, [role="button"], [aria-haspopup="listbox"], input') ?? element;
+  const input = trigger instanceof HTMLInputElement ? trigger : element.querySelector<HTMLInputElement>('input');
+  const wasExpanded = trigger.getAttribute('aria-expanded') === 'true';
+  if (input) {
+    setInputValue(input, value);
+    input.focus();
+  }
+  if (!wasExpanded) trigger.click();
+
+  const desired = normalizeOption(value);
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    const options = listboxOptions(trigger);
+    const option = options.find((candidate) => normalizeOption(candidate.getAttribute('data-value') ?? '') === desired)
+      ?? options.find((candidate) => normalizeOption(candidate.getAttribute('aria-label') ?? candidate.textContent ?? '') === desired)
+      ?? findUniquePrefix(options, (candidate) => normalizeOption(candidate.getAttribute('aria-label') ?? candidate.textContent ?? ''), desired);
+    if (option) {
+      if (!restoreMap.has(element)) {
+        restoreMap.set(element, input?.value || element.getAttribute('aria-valuetext') || element.textContent?.trim() || '');
+      }
+      option.click();
+      return true;
+    }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
+  }
+
+  const requiresOption = trigger.getAttribute('aria-haspopup') === 'listbox'
+    || element.getAttribute('role') === 'combobox'
+    || element.getAttribute('data-automation-id') === 'selectWidget';
+  return Boolean(input) && !requiresOption;
+}
+
+export async function applyValueToField(element: HTMLElement, value: string): Promise<boolean> {
+  if (element instanceof HTMLInputElement && element.type === 'radio') {
+    const group = Array.from(element.ownerDocument.querySelectorAll<HTMLInputElement>('input[type="radio"]'))
+      .filter((candidate) => candidate.name === element.name && candidate.form === element.form);
+    const normalizedValue = value.trim().toLowerCase();
+    const selected = group.find((candidate) => {
+      const optionLabel = candidate.labels ? Array.from(candidate.labels).map((label) => label.textContent ?? '').join(' ') : '';
+      return candidate.value.trim().toLowerCase() === normalizedValue || optionLabel.trim().toLowerCase() === normalizedValue;
+    });
+    if (!selected) return false;
+    for (const candidate of group) {
+      if (!restoreMap.has(candidate)) restoreMap.set(candidate, `checked:${candidate.checked}`);
+    }
+    selected.checked = true;
+    selected.dispatchEvent(new Event('input', { bubbles: true }));
+    selected.dispatchEvent(new Event('change', { bubbles: true }));
+    return true;
+  }
+
   if (element instanceof HTMLInputElement && element.type === 'checkbox') {
     const checked = value.toLowerCase() === 'true' || value.toLowerCase() === 'yes';
     if (!restoreMap.has(element)) {
@@ -43,14 +126,18 @@ export function applyValueToField(element: HTMLElement, value: string): boolean 
     return true;
   }
 
+  const combobox = element.getAttribute('role') === 'combobox' ? element : element.closest('[role="combobox"]');
+  if (combobox instanceof HTMLElement) {
+    return setComboboxValue(combobox, value);
+  }
+
   if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
     setInputValue(element, value);
     return true;
   }
 
   if (element instanceof HTMLSelectElement) {
-    setSelectValue(element, value);
-    return true;
+    return setSelectValue(element, value);
   }
 
   if ((element as HTMLElement).getAttribute('role') === 'checkbox') {
@@ -65,10 +152,14 @@ export function applyValueToField(element: HTMLElement, value: string): boolean 
     return true;
   }
 
+  if (element.matches('[aria-haspopup="listbox"], [data-automation-id="selectWidget"]')) {
+    return setComboboxValue(element, value);
+  }
+
   return false;
 }
 
-export function restoreAppliedValues(): void {
+export async function restoreAppliedValues(): Promise<void> {
   const entries = Array.from(restoreMap.entries());
   for (const [element, previousValue] of entries) {
     if ((element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')) || element.getAttribute('role') === 'checkbox') {
@@ -79,18 +170,15 @@ export function restoreAppliedValues(): void {
         element.click();
       }
     } else if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
-      const descriptor = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
-      if (descriptor && descriptor.set) {
-        descriptor.set.call(element, previousValue);
-      } else {
-        element.value = previousValue;
-      }
+      setTextValue(element, previousValue);
     } else if (element instanceof HTMLSelectElement) {
       element.value = previousValue;
+    } else if (element.matches('[aria-haspopup="listbox"], [data-automation-id="selectWidget"], [role="combobox"]') && previousValue) {
+      await setComboboxValue(element, previousValue);
     }
   }
 
   restoreMap.clear();
 }
 
-(window as typeof window & { __applyanceUndo?: () => void }).__applyanceUndo = restoreAppliedValues;
+(window as typeof window & { __applyanceUndo?: () => Promise<void> }).__applyanceUndo = restoreAppliedValues;

@@ -20,13 +20,15 @@ export class WorkdayAdapter extends GenericAdapter {
     const emailInputs = Array.from(document.querySelectorAll('input[type="email"], input[name*="email"], input[id*="email"]')) as HTMLInputElement[];
     const emailInput = emailInputs.find((entry) => !entry.value.trim());
     if (emailInput && registrationEmail) {
-      applyValueToField(emailInput, registrationEmail);
+      if (await applyValueToField(emailInput, registrationEmail)) result.filled += 1;
     }
 
     const passwordInputs = Array.from(document.querySelectorAll('input[type="password"]')) as HTMLInputElement[];
     if (passwordInputs.length === 2 && profile.workdayAccount.password && passwordInputs.every((input) => !input.value.trim())) {
-      applyValueToField(passwordInputs[0], profile.workdayAccount.password);
-      applyValueToField(passwordInputs[1], profile.workdayAccount.password);
+      const firstFilled = await applyValueToField(passwordInputs[0], profile.workdayAccount.password);
+      const secondFilled = await applyValueToField(passwordInputs[1], profile.workdayAccount.password);
+      if (firstFilled) result.filled += 1;
+      if (secondFilled) result.filled += 1;
     }
 
     return result;

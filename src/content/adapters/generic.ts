@@ -102,11 +102,17 @@ export class GenericAdapter implements AtsAdapter {
 
       const customAnswer = findCustomAnswer(profile, field.label);
       const value = customAnswer || getValueForKey(profile, match.key, occurrence);
-      const currentValue = field.element instanceof HTMLInputElement && field.element.type === 'checkbox'
-        ? (field.element.checked ? 'true' : '')
-        : field.element instanceof HTMLInputElement || field.element instanceof HTMLTextAreaElement || field.element instanceof HTMLSelectElement
-          ? field.element.value
-          : '';
+      const radioField = field.element instanceof HTMLInputElement && field.element.type === 'radio' ? field.element : undefined;
+      const currentRadio = radioField
+        ? Array.from(this.doc.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((candidate) => candidate.name === radioField.name && candidate.form === radioField.form && candidate.checked)
+        : undefined;
+      const currentValue = currentRadio
+        ? currentRadio.value
+        : field.element instanceof HTMLInputElement && field.element.type === 'checkbox'
+          ? (field.element.checked ? 'true' : '')
+          : field.element instanceof HTMLInputElement || field.element instanceof HTMLTextAreaElement || field.element instanceof HTMLSelectElement
+            ? field.element.value
+            : field.value;
       if (!value || currentValue.trim()) {
         if (!opts.onlyFillEmptyFields && currentValue.trim()) {
           // Allow a refill action when explicitly requested.
@@ -115,9 +121,18 @@ export class GenericAdapter implements AtsAdapter {
         }
       }
 
-      applyValueToField(field.element, value);
-      filled += 1;
-      highlightEntries.push({ element: field.element, status: 'filled' });
+      try {
+        if (await applyValueToField(field.element, value)) {
+          filled += 1;
+          highlightEntries.push({ element: field.element, status: 'filled' });
+        } else {
+          needsReview += 1;
+          highlightEntries.push({ element: field.element, status: 'review' });
+        }
+      } catch {
+        needsReview += 1;
+        highlightEntries.push({ element: field.element, status: 'review' });
+      }
     }
 
     applyHighlights(highlightEntries);

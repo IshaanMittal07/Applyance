@@ -36,7 +36,7 @@ export const FIELD_SYNONYMS: Record<string, string[]> = {
   'experience.current': ['currently work here', 'current job', 'currently employed here'],
   skills: ['skills', 'technical skills', 'list your skills'],
   'workdayAccount.registrationEmail': ['registration email', 'account email'],
-  'workAuthorization.authorizedToWorkIn.United States': ['authorized to work in the us', 'authorized to work in the united states', 'legally authorized to work'],
+  'workAuthorization.authorizedToWorkIn.United States': ['authorized to work in the us', 'authorized to work in the u s', 'authorized to work in the united states', 'legally authorized to work'],
   'workAuthorization.requiresSponsorshipIn.United States': ['require sponsorship', 'visa sponsorship', 'sponsorship for employment visa'],
   'workAuthorization.authorizedToWorkIn.Canada': ['authorized to work in canada'],
   'workAuthorization.requiresSponsorshipIn.Canada': ['sponsorship in canada', 'require a work permit in canada'],

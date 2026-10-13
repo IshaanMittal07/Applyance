@@ -41,6 +41,16 @@ function getLabelText(element: HTMLElement): string {
     .filter(Boolean)
     .join(' ');
   const withAutocomplete = (label: string): string => [label, autocompleteLabel].filter(Boolean).join(' ').trim();
+  if (element instanceof HTMLInputElement && element.type === 'radio') {
+    const group = element.closest('fieldset, [role="radiogroup"]');
+    const groupLabel = group?.querySelector('legend')?.textContent ?? group?.getAttribute('aria-label');
+    if (groupLabel) return withAutocomplete(groupLabel.trim());
+    const groupLabelledby = group?.getAttribute('aria-labelledby') ?? element.getAttribute('aria-labelledby');
+    if (groupLabelledby) {
+      const text = groupLabelledby.split(' ').map((part) => document.getElementById(part)?.textContent).filter(Boolean).join(' ');
+      if (text) return withAutocomplete(text.trim());
+    }
+  }
   const directLabel = element.closest('label');
   if (directLabel && directLabel.textContent) {
     return withAutocomplete(directLabel.textContent.trim());
@@ -57,6 +67,22 @@ function getLabelText(element: HTMLElement): string {
     if (id) {
       return withAutocomplete(id.trim());
     }
+  }
+
+  const elementId = element.getAttribute('id');
+  if (elementId) {
+    const associatedLabel = Array.from(element.ownerDocument.querySelectorAll('label[for]'))
+      .find((label) => label.getAttribute('for') === elementId)?.textContent;
+    if (associatedLabel) return withAutocomplete(associatedLabel.trim());
+  }
+
+  const combobox = element.closest('[role="combobox"]');
+  const comboboxLabel = combobox?.getAttribute('aria-label');
+  if (comboboxLabel) return withAutocomplete(comboboxLabel.trim());
+  const comboboxLabelledby = combobox?.getAttribute('aria-labelledby');
+  if (comboboxLabelledby) {
+    const text = comboboxLabelledby.split(' ').map((part) => document.getElementById(part)?.textContent).filter(Boolean).join(' ');
+    if (text) return withAutocomplete(text.trim());
   }
 
   const placeholder = element.getAttribute('placeholder');
@@ -82,17 +108,40 @@ function getLabelText(element: HTMLElement): string {
   return autocompleteLabel;
 }
 
+function getFieldValue(element: HTMLElement): string {
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) {
+    return element.value;
+  }
+
+  const value = element.getAttribute('data-value')
+    ?? element.getAttribute('aria-valuetext')
+    ?? element.querySelector<HTMLElement>('[aria-selected="true"]')?.textContent
+    ?? element.textContent
+    ?? '';
+  const normalized = value.trim().toLowerCase();
+  return ['choose', 'choose one', 'select', 'select one', 'select an option', 'select a value'].includes(normalized) ? '' : value.trim();
+}
+
 export function scanFields(root: Document | Element = document): ScannedField[] {
-  const selectors = 'input, textarea, select, [role="combobox"], [role="listbox"], [role="radiogroup"], [role="checkbox"]';
+  const selectors = 'input, textarea, select, [role="combobox"], [role="listbox"], [role="radiogroup"], [role="checkbox"], [aria-haspopup="listbox"], [data-automation-id="selectWidget"]';
   const results: ScannedField[] = [];
+  const handledRadioGroups = new WeakSet<Element>();
 
   for (const element of Array.from(root.querySelectorAll<HTMLElement>(selectors))) {
+    if ((element.getAttribute('role') === 'combobox' || element.getAttribute('role') === 'listbox') && element.querySelector('input, textarea, select')) {
+      continue;
+    }
+    if (element.getAttribute('data-automation-id') === 'selectWidget' && element.querySelector('button, [role="button"], input, select')) {
+      continue;
+    }
     if (element instanceof HTMLInputElement && (element.type === 'hidden' || element.disabled || element.readOnly)) {
       continue;
     }
 
-    if ((element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) && element.value && element.value.trim()) {
-      // Existing values are preserved and still scanned for matching context.
+    if (element instanceof HTMLInputElement && element.type === 'radio') {
+      const group = element.closest('fieldset, [role="radiogroup"]') ?? element.form;
+      if (group && handledRadioGroups.has(group)) continue;
+      if (group) handledRadioGroups.add(group);
     }
 
     if (element.getAttribute('aria-hidden') === 'true' || isHidden(element)) {
@@ -107,7 +156,7 @@ export function scanFields(root: Document | Element = document): ScannedField[] 
     results.push({
       element,
       label: label || element.getAttribute('name') || element.getAttribute('id') || 'untitled',
-      value: (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement || element instanceof HTMLSelectElement) ? element.value : ''
+      value: getFieldValue(element)
     });
   }
 
