@@ -76,6 +76,10 @@ function getLabelText(element: HTMLElement): string {
     if (associatedLabel) return withAutocomplete(associatedLabel.trim());
   }
 
+  const workdayField = element.closest('[data-automation-id="formField"], [data-automation-id="formFieldContainer"]');
+  const workdayLabel = workdayField?.querySelector('[data-automation-id="formFieldLabel"], [data-automation-id="formFieldQuestion"], legend, label')?.textContent;
+  if (workdayLabel) return withAutocomplete(workdayLabel.trim());
+
   const combobox = element.closest('[role="combobox"]');
   const comboboxLabel = combobox?.getAttribute('aria-label');
   if (comboboxLabel) return withAutocomplete(comboboxLabel.trim());

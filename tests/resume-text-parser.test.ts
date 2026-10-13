@@ -31,7 +31,7 @@ C++, Python, TypeScript, React, AWS
     expect(result.links.github).toBe('https://github.com/ishaan');
     expect(result.links.portfolio).toBeUndefined();
     expect(result.skills).toEqual(['C++', 'Python', 'TypeScript', 'React', 'AWS']);
-    expect(result.education[0]).toMatchObject({ school: 'University of Waterloo', fieldOfStudy: 'Computer Engineering', startDate: '2025-09' });
+    expect(result.education[0]).toMatchObject({ school: 'University of Waterloo', degree: "Bachelor's Degree", fieldOfStudy: 'Computer Engineering', startDate: '2025-09' });
     expect(result.experience[0]).toMatchObject({ company: 'Cynorix Inc.', title: 'Software Engineer Intern', current: true, location: 'Waterloo, ON' });
   });
 

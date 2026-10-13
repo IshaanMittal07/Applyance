@@ -68,6 +68,15 @@ function findCustomAnswer(profile: Profile, label: string): string {
   return '';
 }
 
+function normalizeDropdownAnswer(key: string, value: string): string {
+  if (key === 'education.degree' && /\b(bachelor|basc|bsc)\b/i.test(value)) return "Bachelor's Degree";
+  if (key === 'eeo.veteranStatus') {
+    if (/^(?:no|not a veteran)$/i.test(value.trim())) return 'I am not a veteran';
+    if (/^(?:yes|veteran)$/i.test(value.trim())) return 'I am a veteran';
+  }
+  return value;
+}
+
 export class GenericAdapter implements AtsAdapter {
   public name = 'generic';
 
@@ -87,21 +96,22 @@ export class GenericAdapter implements AtsAdapter {
 
     for (const field of fields) {
       const match = matchField(field.label);
-      if (!match) {
+      const customAnswer = findCustomAnswer(profile, field.label);
+      if (!match && !customAnswer) {
         continue;
       }
 
-      const occurrence = occurrences.get(match.key) ?? 0;
-      occurrences.set(match.key, occurrence + 1);
+      const key = match?.key ?? 'customAnswers';
+      const occurrence = occurrences.get(key) ?? 0;
+      occurrences.set(key, occurrence + 1);
 
-      if (match.confidence < threshold) {
+      if (match && match.confidence < threshold && !customAnswer) {
         needsReview += 1;
         highlightEntries.push({ element: field.element, status: 'review' });
         continue;
       }
 
-      const customAnswer = findCustomAnswer(profile, field.label);
-      const value = customAnswer || getValueForKey(profile, match.key, occurrence);
+      const value = customAnswer || normalizeDropdownAnswer(key, getValueForKey(profile, key, occurrence));
       const radioField = field.element instanceof HTMLInputElement && field.element.type === 'radio' ? field.element : undefined;
       const currentRadio = radioField
         ? Array.from(this.doc.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((candidate) => candidate.name === radioField.name && candidate.form === radioField.form && candidate.checked)

@@ -86,4 +86,20 @@ describe('field scanner autocomplete metadata', () => {
       form.remove();
     }
   });
+
+  it('uses the Workday formFieldLabel for an opaque selectWidget button', () => {
+    const form = document.createElement('div');
+    form.innerHTML = '<div data-automation-id="formField"><div data-automation-id="formFieldLabel">Ethnicity/Race*</div><div data-automation-id="selectWidget"><button id="select-412" aria-haspopup="listbox">Select One</button></div></div>';
+    document.body.append(form);
+    const dimensions = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 120, height: 24 } as ReturnType<HTMLElement['getBoundingClientRect']>);
+
+    try {
+      const fields = scanFields(form);
+      expect(fields).toHaveLength(1);
+      expect(matchField(fields[0].label)?.key).toBe('eeo.raceEthnicity');
+    } finally {
+      dimensions.mockRestore();
+      form.remove();
+    }
+  });
 });

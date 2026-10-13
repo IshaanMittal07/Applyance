@@ -42,13 +42,17 @@ function parseEducation(lines: string[]): EducationRecord[] {
   if (!section.length) return [];
 
   const school = section.find((line) => /\b(university|college|institute|school)\b/i.test(line)) ?? '';
-  const degree = section.find((line) => /\b(bachelor|master|doctor|ph\.?d|basc|bsc|msc|mba|diploma|candidate for)\b/i.test(line)) ?? '';
+  const degreeLine = section.find((line) => /\b(bachelor|master|doctor|ph\.?d|basc|bsc|msc|mba|diploma|candidate for)\b/i.test(line)) ?? '';
+  const degree = /\b(bachelor|basc|bsc)\b/i.test(degreeLine) ? "Bachelor's Degree"
+    : /\b(master|msc|mba)\b/i.test(degreeLine) ? "Master's Degree"
+      : /\b(doctor|ph\.?d)\b/i.test(degreeLine) ? 'Doctorate'
+        : degreeLine;
   const dateRange = section.map((line) => DATE_RANGE.exec(line)).find(Boolean)?.[0] ?? '';
   const dates = dateRange ? dateRange.match(DATE_RANGE) : null;
   const dateParts = dates?.[0].match(DATE_RANGE)?.slice(1) ?? [];
   const start = dateParts[0] ? parseDate(dateParts[0]) : { date: '', month: '', year: '' };
   const end = dateParts[1] && !/^(present|current|now)$/i.test(dateParts[1]) ? parseDate(dateParts[1]) : { date: '', month: '', year: '' };
-  const fieldOfStudy = degree.split(/[,|]/).slice(1).join(',').trim();
+  const fieldOfStudy = degreeLine.split(/[,|]/).slice(1).join(',').trim();
   if (!school && !degree && !fieldOfStudy) return [];
 
   return [{

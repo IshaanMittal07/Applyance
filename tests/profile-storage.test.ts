@@ -3,14 +3,15 @@ import { DEFAULT_PROFILE, migrateProfile, isProfileComplete } from '../src/share
 
 describe('profile schema', () => {
   it('creates a default profile with empty required fields', () => {
-    expect(DEFAULT_PROFILE.schemaVersion).toBe(2);
+    expect(DEFAULT_PROFILE.schemaVersion).toBe(3);
     expect(DEFAULT_PROFILE.personal.email).toBe('');
+    expect(DEFAULT_PROFILE.applicationAnswers.locationAvailability).toBe('');
   });
 
   it('migrates partial profiles without dropping defaults', () => {
     const profile = migrateProfile({ personal: { firstName: 'Ava', lastName: 'Liu', email: 'ava@example.com', phone: '999', phoneCountryCode: '+1', address: { line1: '', city: '', stateOrProvince: '', postalCode: '', country: '' } } });
     expect(profile.personal.firstName).toBe('Ava');
-    expect(profile.schemaVersion).toBe(2);
+    expect(profile.schemaVersion).toBe(3);
     expect(profile.eeo.gender).toBe('');
     expect(profile.workAuthorization.authorizedToWorkIn['United States']).toBe('');
   });

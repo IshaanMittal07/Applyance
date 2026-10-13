@@ -83,4 +83,54 @@ describe('generic adapter', () => {
       root.remove();
     }
   });
+
+  it('fills an employer-specific question from a saved custom answer even without a general synonym', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<label>Do you have family members currently employed at Fidelity?<select><option value="">Select</option><option>No</option><option>Yes</option></select></label>';
+    document.body.append(root);
+    const dimensions = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 120, height: 24 } as ReturnType<HTMLElement['getBoundingClientRect']>);
+    const profile = {
+      ...DEFAULT_PROFILE,
+      customAnswers: [{ questionPattern: 'family members currently employed at Fidelity', answer: 'No' }]
+    };
+
+    try {
+      const result = await new GenericAdapter(root).fillPage(profile);
+      expect(result.filled).toBe(1);
+      expect(root.querySelector('select')?.value).toBe('No');
+    } finally {
+      dimensions.mockRestore();
+      root.remove();
+    }
+  });
+
+  it('fills education and EEO native dropdowns from profile answers', async () => {
+    const root = document.createElement('div');
+    root.innerHTML = `
+      <label>Degree<select><option value="">Select</option><option>Bachelor's Degree</option></select></label>
+      <label>Field of study<select><option value="">Select</option><option>Computer Engineering</option></select></label>
+      <label>Gender*<select><option value="">Select</option><option>Male</option></select></label>
+      <label>Veterans Status*<select><option value="">Select</option><option>I AM NOT A VETERAN</option></select></label>
+      <label>Ethnicity/Race*<select><option value="">Select</option><option>Asian (Not Hispanic or Latinx) (United States of America)</option><option>White</option></select></label>
+      <label>Are you interested in and able to work at the location(s) listed on this opening?<select><option value="">Select</option><option>Yes</option><option>No</option></select></label>`;
+    document.body.append(root);
+    const dimensions = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 120, height: 24 } as ReturnType<HTMLElement['getBoundingClientRect']>);
+    const profile = {
+      ...DEFAULT_PROFILE,
+      education: [{ school: 'University of Waterloo', degree: 'Candidate for Bachelor of Applied Science (BASc)', fieldOfStudy: 'Computer Engineering', currentlyEnrolled: true }],
+      eeo: { ...DEFAULT_PROFILE.eeo, gender: 'Male', veteranStatus: 'No', raceEthnicity: 'Asian' },
+      applicationAnswers: { locationAvailability: 'Yes' }
+    };
+
+    try {
+      const result = await new GenericAdapter(root).fillPage(profile);
+      expect(result.filled).toBe(6);
+      expect(Array.from(root.querySelectorAll('select')).map((select) => select.selectedOptions[0].textContent)).toEqual([
+        "Bachelor's Degree", 'Computer Engineering', 'Male', 'I AM NOT A VETERAN', 'Asian (Not Hispanic or Latinx) (United States of America)', 'Yes'
+      ]);
+    } finally {
+      dimensions.mockRestore();
+      root.remove();
+    }
+  });
 });

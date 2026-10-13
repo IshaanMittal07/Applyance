@@ -94,6 +94,10 @@ export interface Preferences {
   additionalInformation?: string;
 }
 
+export interface ApplicationAnswers {
+  locationAvailability: string;
+}
+
 export interface WorkdayAccount {
   registrationEmail: string;
   password: string;
@@ -120,6 +124,7 @@ export interface Profile {
   workAuthorization: WorkAuthorization;
   eeo: EeoProfile;
   preferences: Preferences;
+  applicationAnswers: ApplicationAnswers;
   customAnswers: CustomAnswer[];
   documents: Documents;
   workdayAccount: WorkdayAccount;
@@ -137,7 +142,7 @@ export const DEFAULT_EEO: EeoProfile = {
 };
 
 export const DEFAULT_PROFILE: Profile = {
-  schemaVersion: 2,
+  schemaVersion: 3,
   personal: {
     firstName: '',
     lastName: '',
@@ -176,6 +181,7 @@ export const DEFAULT_PROFILE: Profile = {
   },
   eeo: DEFAULT_EEO,
   preferences: {},
+  applicationAnswers: { locationAvailability: '' },
   customAnswers: [],
   documents: {},
   workdayAccount: {
@@ -216,7 +222,7 @@ export function migrateProfile(value: ProfileMigrationInput | null | undefined):
   const merged: Profile = {
     ...base,
     ...value,
-    schemaVersion: 2,
+    schemaVersion: 3,
     personal: {
       ...base.personal,
       ...value.personal,
@@ -243,6 +249,10 @@ export function migrateProfile(value: ProfileMigrationInput | null | undefined):
     preferences: {
       ...base.preferences,
       ...value.preferences
+    },
+    applicationAnswers: {
+      ...base.applicationAnswers,
+      ...value.applicationAnswers
     },
     documents: {
       ...base.documents,
