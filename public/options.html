@@ -4,21 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Applyance Options</title>
-    <style>
-      body { font-family: sans-serif; margin: 0; padding: 24px; background: #f8fafc; }
-      .container { max-width: 1200px; margin: 0 auto; }
-      h1 { margin-top: 0; }
-      button { padding: 10px 16px; border: 0; border-radius: 8px; cursor: pointer; }
-      .primary { background: #0d6efd; color: white; }
-      .secondary { background: #e5e7eb; color: #111827; }
-      .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); margin-top: 16px; }
-    </style>
+    <link rel="stylesheet" href="onboarding.css" />
   </head>
   <body>
-    <div class="container">
-      <h1>Applyance options</h1>
+    <main class="setup-shell">
+      <header class="wizard-header">
+        <a class="brand" href="#"><img src="icons/icon32.png" width="36" height="36" alt="" /><span>Applyance</span></a>
+        <span class="step-count">OPTIONS</span>
+      </header>
+      <p class="eyebrow">PROFILE SETTINGS</p>
+      <h1>Manage your profile.</h1>
+      <p class="step-description">Your information stays in this browser. Edit the full profile or adjust autofill behavior below.</p>
+      <button type="button" class="button button-primary" id="edit-profile-btn">Edit full profile</button>
       <div id="app"></div>
-    </div>
-    <script type="module" src="../dist/options/options.js"></script>
+    </main>
+    <script type="module" src="options/options.js"></script>
   </body>
 </html>

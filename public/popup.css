@@ -1,0 +1,73 @@
+:root {
+  color-scheme: light;
+  --green-950: #103c2f;
+  --green-800: #176b4f;
+  --green-50: #f2f9f4;
+  --ink: #1d2a25;
+  --muted: #66756d;
+  --line: #d9e5dc;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  width: 310px;
+  margin: 0;
+  padding: 16px;
+  color: var(--ink);
+  background: linear-gradient(145deg, #f2f8f3 0%, #fff 60%);
+  font-family: "Aptos", "Segoe UI", sans-serif;
+  font-size: 14px;
+}
+
+.popup-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.popup-header img {
+  display: block;
+  border-radius: 6px;
+}
+
+h1 {
+  margin: 0;
+  color: var(--green-950);
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+#app p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+#app button {
+  width: 100%;
+  min-height: 39px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  color: var(--green-800);
+  background: #fff;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 650;
+}
+
+#app button.primary {
+  border-color: var(--green-800);
+  color: #fff;
+  background: var(--green-800);
+}
+
+#app button:hover {
+  filter: brightness(0.97);
+}

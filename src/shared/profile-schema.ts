@@ -3,6 +3,7 @@ export interface Address {
   line2?: string;
   city: string;
   stateOrProvince: string;
+  county?: string;
   postalCode: string;
   country: string;
 }
@@ -12,6 +13,8 @@ export interface PersonalInfo {
   middleName?: string;
   lastName: string;
   preferredName?: string;
+  preferredMiddleName?: string;
+  preferredLastName?: string;
   pronouns?: string;
   email: string;
   phone: string;
@@ -30,6 +33,7 @@ export interface LinkRecord {
 export interface EducationRecord {
   school: string;
   degree: string;
+  accreditation?: string;
   fieldOfStudy: string;
   minor?: string;
   gpa?: string;
@@ -38,6 +42,8 @@ export interface EducationRecord {
   startYear?: string;
   endMonth?: string;
   endYear?: string;
+  startDate?: string;
+  endDate?: string;
   currentlyEnrolled: boolean;
 }
 
@@ -59,8 +65,8 @@ export interface LanguageRecord {
 }
 
 export interface WorkAuthorization {
-  authorizedToWorkIn: Record<string, boolean>;
-  requiresSponsorshipIn: Record<string, boolean>;
+  authorizedToWorkIn: Record<string, string>;
+  requiresSponsorshipIn: Record<string, string>;
   citizenship?: string[];
   currentVisaStatus?: string;
   willingToRelocate?: boolean;
@@ -73,6 +79,7 @@ export interface EeoProfile {
   raceEthnicity: string;
   veteranStatus: string;
   disabilityStatus: string;
+  lgbtqIdentity?: string;
   sexualOrientation?: string;
   transgender?: string;
 }
@@ -82,6 +89,12 @@ export interface Preferences {
   earliestStartDate?: string;
   salaryExpectation?: string;
   noticePeriod?: string;
+  additionalInformation?: string;
+}
+
+export interface WorkdayAccount {
+  registrationEmail: string;
+  password: string;
 }
 
 export interface CustomAnswer {
@@ -107,18 +120,22 @@ export interface Profile {
   preferences: Preferences;
   customAnswers: CustomAnswer[];
   documents: Documents;
+  workdayAccount: WorkdayAccount;
 }
 
 export const DEFAULT_EEO: EeoProfile = {
-  gender: 'Decline to answer',
-  hispanicOrLatino: 'Decline to answer',
-  raceEthnicity: 'Decline to answer',
-  veteranStatus: 'Decline to answer',
-  disabilityStatus: 'Decline to answer'
+  gender: '',
+  hispanicOrLatino: '',
+  raceEthnicity: '',
+  veteranStatus: '',
+  disabilityStatus: '',
+  lgbtqIdentity: '',
+  sexualOrientation: '',
+  transgender: ''
 };
 
 export const DEFAULT_PROFILE: Profile = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   personal: {
     firstName: '',
     lastName: '',
@@ -127,8 +144,10 @@ export const DEFAULT_PROFILE: Profile = {
     phoneCountryCode: '+1',
     address: {
       line1: '',
+      line2: '',
       city: '',
       stateOrProvince: '',
+      county: '',
       postalCode: '',
       country: ''
     }
@@ -145,19 +164,39 @@ export const DEFAULT_PROFILE: Profile = {
   languages: [],
   workAuthorization: {
     authorizedToWorkIn: {
-      'United States': false,
-      Canada: false
+      'United States': '',
+      Canada: ''
     },
     requiresSponsorshipIn: {
-      'United States': false,
-      Canada: false
+      'United States': '',
+      Canada: ''
     }
   },
   eeo: DEFAULT_EEO,
   preferences: {},
   customAnswers: [],
-  documents: {}
+  documents: {},
+  workdayAccount: {
+    registrationEmail: '',
+    password: ''
+  }
 };
+
+function migrateAnswerMap(defaults: Record<string, string>, values?: Record<string, unknown>): Record<string, string> {
+  const answers = { ...defaults };
+  for (const [country, answer] of Object.entries(values ?? {})) {
+    answers[country] = typeof answer === 'boolean' ? (answer ? 'Yes' : '') : typeof answer === 'string' ? answer : '';
+  }
+  return answers;
+}
+
+function legacyMonthDate(month?: string, year?: string): string {
+  if (!year) {
+    return '';
+  }
+  const monthNumber = month ? String(new Date(`${month} 1, ${year}`).getMonth() + 1).padStart(2, '0') : '01';
+  return `${year}-${monthNumber}`;
+}
 
 export function migrateProfile(value: Partial<Profile> | null | undefined): Profile {
   const base: Profile = JSON.parse(JSON.stringify(DEFAULT_PROFILE));
@@ -168,6 +207,7 @@ export function migrateProfile(value: Partial<Profile> | null | undefined): Prof
   const merged: Profile = {
     ...base,
     ...value,
+    schemaVersion: 2,
     personal: {
       ...base.personal,
       ...value.personal,
@@ -184,8 +224,8 @@ export function migrateProfile(value: Partial<Profile> | null | undefined): Prof
     workAuthorization: {
       ...base.workAuthorization,
       ...value.workAuthorization,
-      authorizedToWorkIn: { ...base.workAuthorization.authorizedToWorkIn, ...value.workAuthorization?.authorizedToWorkIn },
-      requiresSponsorshipIn: { ...base.workAuthorization.requiresSponsorshipIn, ...value.workAuthorization?.requiresSponsorshipIn }
+      authorizedToWorkIn: migrateAnswerMap(base.workAuthorization.authorizedToWorkIn, value.workAuthorization?.authorizedToWorkIn as Record<string, unknown> | undefined),
+      requiresSponsorshipIn: migrateAnswerMap(base.workAuthorization.requiresSponsorshipIn, value.workAuthorization?.requiresSponsorshipIn as Record<string, unknown> | undefined)
     },
     eeo: {
       ...base.eeo,
@@ -199,8 +239,21 @@ export function migrateProfile(value: Partial<Profile> | null | undefined): Prof
       ...base.documents,
       ...value.documents
     },
-    education: value.education ?? base.education,
-    experience: value.experience ?? base.experience,
+    workdayAccount: {
+      ...base.workdayAccount,
+      ...value.workdayAccount
+    },
+    education: (value.education ?? base.education).map((entry) => ({
+      ...entry,
+      accreditation: entry.accreditation ?? entry.degree,
+      startDate: entry.startDate ?? legacyMonthDate(entry.startMonth, entry.startYear),
+      endDate: entry.endDate ?? legacyMonthDate(entry.endMonth, entry.endYear)
+    })),
+    experience: (value.experience ?? base.experience).map((entry) => ({
+      ...entry,
+      startDate: entry.startDate ?? legacyMonthDate(entry.startMonth, entry.startYear),
+      endDate: entry.endDate ?? legacyMonthDate(entry.endMonth, entry.endYear)
+    })),
     skills: value.skills ?? base.skills,
     languages: value.languages ?? base.languages,
     customAnswers: value.customAnswers ?? base.customAnswers

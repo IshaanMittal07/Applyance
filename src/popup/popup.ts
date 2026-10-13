@@ -17,9 +17,10 @@ async function render(): Promise<void> {
     return;
   }
 
-  root.innerHTML = '<p>Your profile is ready. Fill this page when you are on an application.</p><button class="primary" type="button">Fill this page</button><button class="secondary" type="button" id="undo-button">Undo</button>';
+  root.innerHTML = '<p>Your profile is ready. Fill this page when you are on an application.</p><button class="primary" type="button">Fill this page</button><button class="secondary" type="button" id="undo-button">Undo</button><button class="secondary" type="button" id="edit-profile-button">Edit full profile</button>';
   const button = root.querySelector('.primary');
   const undoButton = root.querySelector('#undo-button');
+  const editProfileButton = root.querySelector('#edit-profile-button');
 
   button?.addEventListener('click', async () => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -38,6 +39,10 @@ async function render(): Promise<void> {
     if (tab.id) {
       chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { (window as typeof window & { __applyanceUndo?: () => void }).__applyanceUndo?.(); } });
     }
+  });
+
+  editProfileButton?.addEventListener('click', () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
   });
 }
 

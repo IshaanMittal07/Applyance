@@ -118,3 +118,7 @@ const renderForm = async (): Promise<void> => {
 };
 
 void renderForm();
+
+document.querySelector('#edit-profile-btn')?.addEventListener('click', () => {
+  chrome.tabs.create({ url: chrome.runtime.getURL('onboarding.html') });
+});
