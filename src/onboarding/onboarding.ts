@@ -72,6 +72,19 @@ function blankExperience(): ExperienceRecord {
   return { company: '', title: '', startMonth: '', startYear: '', current: false, description: '' };
 }
 
+const SCREENING_QUESTION_TEMPLATES = [
+  'accepted an offer to work at Fidelity',
+  'family member(s) currently employed at Fidelity',
+  'worked for either PricewaterhouseCoopers',
+  'agreements with current or former employers'
+];
+
+const normalizeQuestionPattern = (value: string): string => value.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+
+function isScreeningQuestionTemplate(value: string): boolean {
+  return SCREENING_QUESTION_TEMPLATES.some((pattern) => normalizeQuestionPattern(pattern) === normalizeQuestionPattern(value));
+}
+
 function mergeResumeSuggestions(profile: Profile, suggestions: ResumeSuggestions): { fields: number; skills: number; education: number; experience: number } {
   let fields = 0;
   for (const key of ['firstName', 'middleName', 'lastName', 'email', 'phone'] as const) {
@@ -144,12 +157,22 @@ function renderExperience(entries: ExperienceRecord[]): string {
 }
 
 function renderCustomAnswers(profile: Profile): string {
-  return `${profile.customAnswers.map((answer, index) => `
+  const savedAnswers = new Map(profile.customAnswers.map((answer) => [normalizeQuestionPattern(answer.questionPattern), answer]));
+  const templates = SCREENING_QUESTION_TEMPLATES.map((questionPattern) => ({
+    answer: savedAnswers.get(normalizeQuestionPattern(questionPattern)) ?? { questionPattern, answer: '' },
+    template: true,
+    profileIndex: -1
+  }));
+  const otherAnswers = profile.customAnswers
+    .map((answer, profileIndex) => ({ answer, profileIndex, template: false }))
+    .filter(({ answer }) => !isScreeningQuestionTemplate(answer.questionPattern));
+  const answers = [...templates, ...otherAnswers];
+  return `${answers.map(({ answer, profileIndex, template }, index) => `
     <article class="record compact-record" data-record="custom-answer">
-      <div class="record-heading"><h3>Custom answer ${index + 1}</h3><button class="icon-button" type="button" data-remove="custom-answer" data-index="${index}" aria-label="Remove custom answer ${index + 1}" title="Remove">×</button></div>
+      <div class="record-heading"><h3>${template ? 'Screening answer' : `Custom answer ${index - SCREENING_QUESTION_TEMPLATES.length + 1}`}</h3>${template ? '' : `<button class="icon-button" type="button" data-remove="custom-answer" data-index="${profileIndex}" aria-label="Remove custom answer ${index + 1}" title="Remove">×</button>`}</div>
       <div class="field-grid">
         ${field('Question or label contains', 'questionPattern', answer.questionPattern, 'text', 'e.g. willing to relocate')}
-        ${field('Answer', 'answer', answer.answer)}
+        ${isScreeningQuestionTemplate(answer.questionPattern) ? selectField('Answer', 'answer', answer.answer, ['Yes', 'No', 'Decline to answer']) : field('Answer', 'answer', answer.answer)}
       </div>
     </article>`).join('')}
     <button class="text-button" type="button" data-add="custom-answer">+ Add a custom answer</button>`;
@@ -256,6 +279,7 @@ const steps: WizardStep[] = [
       ${selectField('Will you now or in the future require employment visa sponsorship in the U.S.?', 'requiresSponsorshipIn.United States', profile.workAuthorization.requiresSponsorshipIn['United States'] ?? '', ['Yes', 'No', 'Not sure', 'Decline to answer'])}
       ${selectField('Are you authorized to work in Canada?', 'authorizedToWorkIn.Canada', profile.workAuthorization.authorizedToWorkIn.Canada ?? '', ['Yes', 'No', 'Not sure', 'Decline to answer'])}
       ${selectField('Will you require employment visa sponsorship in Canada?', 'requiresSponsorshipIn.Canada', profile.workAuthorization.requiresSponsorshipIn.Canada ?? '', ['Yes', 'No', 'Not sure', 'Decline to answer'])}
+      ${selectField('Are you interested in and able to work at the location(s) listed on the opening?', 'applicationAnswers.locationAvailability', profile.applicationAnswers.locationAvailability, ['Yes', 'No', 'Decline to answer'])}
       ${field('Current visa status (optional)', 'currentVisaStatus', profile.workAuthorization.currentVisaStatus ?? '')}
       ${field('Citizenship(s), optional', 'citizenship', (profile.workAuthorization.citizenship ?? []).join(', '), 'Separate multiple countries with commas')}
       ${selectField('Willing to relocate?', 'willingToRelocate', profile.workAuthorization.willingToRelocate === undefined ? '' : profile.workAuthorization.willingToRelocate ? 'Yes' : 'No', ['Yes', 'No', 'Decline to answer'])}
@@ -268,6 +292,7 @@ const steps: WizardStep[] = [
         currentVisaStatus: readValue('currentVisaStatus'), citizenship: readValue('citizenship').split(',').map((item) => item.trim()).filter(Boolean),
         willingToRelocate: readValue('willingToRelocate') === 'Yes' ? true : readValue('willingToRelocate') === 'No' ? false : undefined
       };
+      profile.applicationAnswers = { ...profile.applicationAnswers, locationAvailability: readValue('applicationAnswers.locationAvailability') };
     }
   },
   {
