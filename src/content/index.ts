@@ -6,6 +6,7 @@ import { scanFields } from './field-scanner';
 import { matchField } from './matcher';
 import { mountReviewPanel, ReviewPanel } from './review-panel';
 import { restoreAppliedValues } from './fillers';
+import { clearHighlights, countReviewHighlights } from './highlight';
 
 const FORM_CONTROL_SELECTOR = 'input:not([type="hidden"]), textarea, select, [role="combobox"], [role="radiogroup"], [role="checkbox"]';
 const PAGE_WINDOW = window as typeof window & {
@@ -20,6 +21,7 @@ let aiFilled = 0;
 let needsReview = 0;
 let isFilling = false;
 let fillAgain = false;
+let manualFillPending = false;
 let fillTimer = 0;
 
 function ensureReviewPanel(): ReviewPanel {
@@ -27,17 +29,22 @@ function ensureReviewPanel(): ReviewPanel {
     reviewPanel = mountReviewPanel(document);
     reviewPanel.onUndo(async () => {
       await restoreAppliedValues();
+      clearHighlights(document);
       totalFilled = 0;
       aiFilled = 0;
+      needsReview = 0;
       reviewPanel?.update('Autofill undone', { filled: 0, needsReview: 0 });
     });
   }
   return reviewPanel;
 }
 
-async function runPageFill(): Promise<FillReport> {
+// Automatic runs (page load, new form sections) fill each field once. A manual run, from the popup button,
+// also retries fields that are still empty.
+async function runPageFill(manual = false): Promise<FillReport> {
   if (isFilling) {
     fillAgain = true;
+    manualFillPending ||= manual;
     return { filled: 0, needsReview: 0 };
   }
 
@@ -57,9 +64,9 @@ async function runPageFill(): Promise<FillReport> {
   try {
     const profile = await loadProfile();
     const adapter = detectAdapter(new URL(window.location.href), document);
-    const result = await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
+    const result = await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true, retryAttempted: manual });
     totalFilled += result.filled;
-    needsReview = result.needsReview;
+    needsReview = countReviewHighlights(document);
 
     let aiError = '';
     try {
@@ -71,6 +78,7 @@ async function runPageFill(): Promise<FillReport> {
         result.filled += aiResult.filled;
         result.aiFilled = aiResult.filled;
         aiError = aiResult.error ?? '';
+        needsReview = countReviewHighlights(document);
       }
     } catch {
       // AI assist is optional; its failure must not hide what the profile already filled.
@@ -89,8 +97,11 @@ async function runPageFill(): Promise<FillReport> {
   } finally {
     isFilling = false;
     if (fillAgain) {
+      const manualAgain = manualFillPending;
       fillAgain = false;
-      scheduleFill();
+      manualFillPending = false;
+      if (manualAgain) void runPageFill(true);
+      else scheduleFill();
     }
   }
 }
@@ -102,12 +113,12 @@ function nodeHasFormControls(node: unknown): boolean {
 
 function scheduleFill(): void {
   window.clearTimeout(fillTimer);
-  fillTimer = window.setTimeout(() => { void runPageFill(); }, 250);
+  fillTimer = window.setTimeout(() => { void runPageFill(false); }, 250);
 }
 
 if (!PAGE_WINDOW.__applyanceContentInstalled) {
   PAGE_WINDOW.__applyanceContentInstalled = true;
-  PAGE_WINDOW.__applyanceFill = runPageFill;
+  PAGE_WINDOW.__applyanceFill = () => runPageFill(true);
 
   const observer = new window.MutationObserver((mutations) => {
     if (mutations.some((mutation) => Array.from(mutation.addedNodes).some(nodeHasFormControls))) {

@@ -7,6 +7,18 @@ import { applyHighlights } from '../highlight';
 export interface FillOptions {
   confidenceThreshold?: number;
   onlyFillEmptyFields?: boolean;
+  // Automatic passes touch each field once, so a value the user clears or a dropdown that would not fill is
+  // left alone. A fill the user asks for (the popup button) retries fields that are still empty.
+  retryAttempted?: boolean;
+}
+
+const attemptedFields = new WeakSet<HTMLElement>();
+
+// Returns false when an automatic pass already handled this field.
+export function claimField(element: HTMLElement, opts: FillOptions = {}): boolean {
+  if (!opts.retryAttempted && attemptedFields.has(element)) return false;
+  attemptedFields.add(element);
+  return true;
 }
 
 export interface FillReport {
@@ -106,7 +118,13 @@ export class GenericAdapter implements AtsAdapter {
       const occurrence = occurrences.get(key) ?? 0;
       occurrences.set(key, occurrence + 1);
 
+      // Counted above first, so a newly added section (a second school) still maps to the right profile entry.
+      if (!opts.retryAttempted && attemptedFields.has(field.element)) {
+        continue;
+      }
+
       if (match && match.confidence < threshold && !customAnswer) {
+        attemptedFields.add(field.element);
         needsReview += 1;
         highlightEntries.push({ element: field.element, status: 'review' });
         continue;
@@ -132,6 +150,7 @@ export class GenericAdapter implements AtsAdapter {
         }
       }
 
+      attemptedFields.add(field.element);
       try {
         if (await applyValueToField(field.element, value)) {
           filled += 1;
