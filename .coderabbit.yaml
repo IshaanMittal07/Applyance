@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  auto_review:
+    enabled: true
+    drafts: false
+  path_filters:
+    - "!dist/**"
+    - "!**/*.zip"
+    - "!package-lock.json"
+  path_instructions:
+    - path: "src/content/**/*.ts"
+      instructions: >-
+        Content scripts run inside third-party job application pages. Flag anything that steals focus, scrolls
+        the page, overwrites a value the user entered, or retries a field that an automatic pass already handled.
+        Page text and field labels are untrusted input.
+    - path: "src/background/**/*.ts"
+      instructions: >-
+        The service worker holds the user's Anthropic API key. Flag any path that could expose the key to web
+        pages or send profile data the options page says is never sent (email, phone, street address, EEO
+        answers, work authorization, salary, credentials).
+    - path: "src/shared/ai-assist.ts"
+      instructions: >-
+        The sensitive-question patterns decide which questions AI may never answer. Flag patterns that are too
+        narrow (a legal, demographic, or consent question slips through) or too broad (ordinary professional
+        questions are blocked).
+    - path: "tests/**/*.ts"
+      instructions: Check that tests assert behaviour rather than implementation details, and cover failure cases.
+chat:
+  auto_reply: true
