@@ -25,7 +25,7 @@ async function handleAiSuggest(request: AiSuggestRequest): Promise<AiSuggestResp
   const settings = await loadSettings();
   if (!settings.aiAssistEnabled) return { ok: false, error: 'AI assist is turned off.' };
   const profile = await loadProfile();
-  return suggestAnswers(settings.anthropicApiKey, profile, request.fields, request.page);
+  return suggestAnswers(settings.anthropicApiKey, profile, request.fields, request.page, settings.aiGlobalPrompt);
 }
 
 chrome.runtime.onMessage.addListener((message: AiSuggestRequest, sender, sendResponse) => {

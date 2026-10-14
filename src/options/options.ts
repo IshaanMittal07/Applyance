@@ -1,7 +1,12 @@
 import { Profile } from '../shared/profile-schema';
+import { AI_GLOBAL_PROMPT_MAX_LENGTH } from '../shared/ai-assist';
 import { clearAllData, loadProfile, loadSettings, saveProfile, saveSettings } from '../shared/storage';
 
 const root = document.querySelector('#app');
+
+function escapeHtml(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 const renderForm = async (): Promise<void> => {
   if (!root) {
@@ -42,7 +47,11 @@ const renderForm = async (): Promise<void> => {
         <p>When a question is not covered by your profile, Claude drafts an answer using only what your profile already says. It leaves the field empty when your profile does not support an answer, and every AI answer is highlighted for you to check.</p>
         <p>When this is on, the question labels and your name, city, links, education, experience, skills, languages, preferences, and saved answers are sent to Anthropic. Your email, phone, street address, demographic answers, work authorization, salary, and Workday password are never sent. Questions about those topics, legal declarations, and consents are never answered by AI.</p>
         <label><input type="checkbox" name="aiAssistEnabled" ${settings.aiAssistEnabled ? 'checked' : ''} /> Use AI for questions my profile does not cover</label>
-        <label>Anthropic API key <input type="password" name="anthropicApiKey" autocomplete="off" spellcheck="false" value="${settings.anthropicApiKey.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" /></label>
+        <label>Anthropic API key <input type="password" name="anthropicApiKey" autocomplete="off" spellcheck="false" value="${escapeHtml(settings.anthropicApiKey)}" /></label>
+        <label>Global prompt
+          <textarea name="aiGlobalPrompt" rows="6" maxlength="${AI_GLOBAL_PROMPT_MAX_LENGTH}" placeholder="Context Claude should use on every application, e.g. the roles you are targeting, what you want to highlight, work preferences, and the tone you want.">${escapeHtml(settings.aiGlobalPrompt)}</textarea>
+        </label>
+        <p>Claude reads the global prompt on every application and treats what you write as facts about you, alongside your profile. It is sent to Anthropic with your profile, so leave out anything you would not want sent.</p>
       </div>
       <div class="card">
         <button type="submit" class="primary">Save profile</button>
@@ -83,7 +92,8 @@ const renderForm = async (): Promise<void> => {
       enableOnAllSites: formData.get('enableOnAllSites') === 'on',
       autoTickWorkdayTerms: formData.get('autoTickWorkdayTerms') === 'on',
       aiAssistEnabled: formData.get('aiAssistEnabled') === 'on',
-      anthropicApiKey: String(formData.get('anthropicApiKey') ?? '').trim()
+      anthropicApiKey: String(formData.get('anthropicApiKey') ?? '').trim(),
+      aiGlobalPrompt: String(formData.get('aiGlobalPrompt') ?? '').trim().slice(0, AI_GLOBAL_PROMPT_MAX_LENGTH)
     });
     window.alert('Profile saved.');
     await renderForm();

@@ -14,6 +14,7 @@ export interface Settings {
   autoTickWorkdayTerms: boolean;
   aiAssistEnabled: boolean;
   anthropicApiKey: string;
+  aiGlobalPrompt: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -22,7 +23,8 @@ export const DEFAULT_SETTINGS: Settings = {
   enableOnAllSites: false,
   autoTickWorkdayTerms: false,
   aiAssistEnabled: false,
-  anthropicApiKey: ''
+  anthropicApiKey: '',
+  aiGlobalPrompt: ''
 };
 
 async function getStorageArea<T>(key: string, fallback: T): Promise<T> {

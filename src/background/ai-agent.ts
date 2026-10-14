@@ -1,19 +1,22 @@
 import Anthropic from '@anthropic-ai/sdk';
+import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import {
-  AI_ANSWER_SCHEMA,
   AI_MAX_FIELDS_PER_REQUEST,
   AI_MODEL,
   AI_SYSTEM_PROMPT,
   AiFieldRequest,
   AiPageContext,
   AiSuggestResponse,
-  buildUserPrompt,
-  isSensitiveLabel,
-  validateAiAnswers
+  buildApplicantContext,
+  buildQuestionsPrompt,
+  isSensitiveLabel
 } from '../shared/ai-assist';
 import { Profile } from '../shared/profile-schema';
+import { buildResponseSchema, validateAiAnswers } from './ai-schemas';
 
-async function requestBatch(client: Anthropic, profile: Profile, fields: AiFieldRequest[], page: AiPageContext): Promise<Record<string, string>> {
+async function requestBatch(client: Anthropic, applicantContext: string, fields: AiFieldRequest[], page: AiPageContext): Promise<Record<string, string>> {
+  // create() rather than parse(): parse() throws on a refused or cut-off reply before stop_reason can be read,
+  // so the reply is checked first and then validated with the same Zod schema.
   const response = await client.beta.messages.create({
     model: AI_MODEL,
     max_tokens: 16000,
@@ -21,10 +24,14 @@ async function requestBatch(client: Anthropic, profile: Profile, fields: AiField
     fallbacks: 'default',
     output_config: {
       effort: 'high',
-      format: { type: 'json_schema', schema: AI_ANSWER_SCHEMA }
+      format: betaZodOutputFormat(buildResponseSchema(fields))
     },
-    system: AI_SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: buildUserPrompt(profile, fields, page, new Date()) }]
+    system: [
+      { type: 'text', text: AI_SYSTEM_PROMPT },
+      // The profile and guidance repeat across batches and pages; the questions after them change every time.
+      { type: 'text', text: applicantContext, cache_control: { type: 'ephemeral' } }
+    ],
+    messages: [{ role: 'user', content: buildQuestionsPrompt(fields, page, new Date()) }]
   });
 
   if (response.stop_reason === 'refusal') throw new Error('Claude declined to answer these questions.');
@@ -45,7 +52,7 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : 'AI assist failed.';
 }
 
-export async function suggestAnswers(apiKey: string, profile: Profile, fields: AiFieldRequest[], page: AiPageContext): Promise<AiSuggestResponse> {
+export async function suggestAnswers(apiKey: string, profile: Profile, fields: AiFieldRequest[], page: AiPageContext, globalPrompt = ''): Promise<AiSuggestResponse> {
   if (!apiKey.trim()) return { ok: false, error: 'Add an Anthropic API key in Applyance options to use AI assist.' };
 
   // The content script already filters these; re-check here so nothing sensitive is sent even if it did not.
@@ -54,10 +61,11 @@ export async function suggestAnswers(apiKey: string, profile: Profile, fields: A
 
   // The key belongs to the user and stays in this extension's service worker; it is never exposed to web pages.
   const client = new Anthropic({ apiKey, dangerouslyAllowBrowser: true });
+  const applicantContext = buildApplicantContext(profile, globalPrompt);
   const answers: Record<string, string> = {};
   try {
     for (let start = 0; start < allowed.length; start += AI_MAX_FIELDS_PER_REQUEST) {
-      Object.assign(answers, await requestBatch(client, profile, allowed.slice(start, start + AI_MAX_FIELDS_PER_REQUEST), page));
+      Object.assign(answers, await requestBatch(client, applicantContext, allowed.slice(start, start + AI_MAX_FIELDS_PER_REQUEST), page));
     }
     return { ok: true, answers };
   } catch (error) {
