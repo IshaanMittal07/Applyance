@@ -38,6 +38,13 @@ const renderForm = async (): Promise<void> => {
         <label><input type="checkbox" name="autoTickWorkdayTerms" ${settings.autoTickWorkdayTerms ? 'checked' : ''} /> Auto-tick Workday terms</label>
       </div>
       <div class="card">
+        <h2>AI assist</h2>
+        <p>When a question is not covered by your profile, Claude drafts an answer using only what your profile already says. It leaves the field empty when your profile does not support an answer, and every AI answer is highlighted for you to check.</p>
+        <p>When this is on, the question labels and your name, city, links, education, experience, skills, languages, preferences, and saved answers are sent to Anthropic. Your email, phone, street address, demographic answers, work authorization, salary, and Workday password are never sent. Questions about those topics, legal declarations, and consents are never answered by AI.</p>
+        <label><input type="checkbox" name="aiAssistEnabled" ${settings.aiAssistEnabled ? 'checked' : ''} /> Use AI for questions my profile does not cover</label>
+        <label>Anthropic API key <input type="password" name="anthropicApiKey" autocomplete="off" spellcheck="false" value="${settings.anthropicApiKey.replace(/&/g, '&amp;').replace(/"/g, '&quot;')}" /></label>
+      </div>
+      <div class="card">
         <button type="submit" class="primary">Save profile</button>
         <button type="button" class="secondary" id="export-btn">Export profile</button>
         <button type="button" class="secondary" id="import-btn">Import profile</button>
@@ -74,7 +81,9 @@ const renderForm = async (): Promise<void> => {
       confidenceThreshold: Number(formData.get('confidenceThreshold') ?? 0.7),
       onlyFillEmptyFields: formData.get('onlyFillEmptyFields') === 'on',
       enableOnAllSites: formData.get('enableOnAllSites') === 'on',
-      autoTickWorkdayTerms: formData.get('autoTickWorkdayTerms') === 'on'
+      autoTickWorkdayTerms: formData.get('autoTickWorkdayTerms') === 'on',
+      aiAssistEnabled: formData.get('aiAssistEnabled') === 'on',
+      anthropicApiKey: String(formData.get('anthropicApiKey') ?? '').trim()
     });
     window.alert('Profile saved.');
     await renderForm();

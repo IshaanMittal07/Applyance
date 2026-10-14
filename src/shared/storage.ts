@@ -12,13 +12,17 @@ export interface Settings {
   onlyFillEmptyFields: boolean;
   enableOnAllSites: boolean;
   autoTickWorkdayTerms: boolean;
+  aiAssistEnabled: boolean;
+  anthropicApiKey: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   confidenceThreshold: 0.7,
   onlyFillEmptyFields: true,
   enableOnAllSites: false,
-  autoTickWorkdayTerms: false
+  autoTickWorkdayTerms: false,
+  aiAssistEnabled: false,
+  anthropicApiKey: ''
 };
 
 async function getStorageArea<T>(key: string, fallback: T): Promise<T> {
