@@ -1,8 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_PROFILE } from '../src/shared/profile-schema';
-import { loadProfile } from '../src/shared/storage';
+import { DEFAULT_SETTINGS, loadProfile } from '../src/shared/storage';
 
-vi.mock('../src/shared/storage', () => ({ loadProfile: vi.fn() }));
+vi.mock('../src/shared/storage', async (importOriginal) => ({
+  DEFAULT_SETTINGS: (await importOriginal<typeof import('../src/shared/storage')>()).DEFAULT_SETTINGS,
+  loadProfile: vi.fn(),
+  loadSettings: vi.fn(async () => DEFAULT_SETTINGS)
+}));
 
 describe('automatic application detection', () => {
   afterEach(() => {

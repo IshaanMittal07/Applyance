@@ -12,6 +12,7 @@ export interface FillOptions {
 export interface FillReport {
   filled: number;
   needsReview: number;
+  aiFilled?: number;
 }
 
 export interface AtsAdapter {

@@ -1,5 +1,6 @@
 import { detectAdapter } from './detect';
-import { loadProfile } from '../shared/storage';
+import { loadProfile, loadSettings } from '../shared/storage';
+import { runAiAssist } from './ai-fill';
 import type { FillReport } from './adapters/generic';
 import { scanFields } from './field-scanner';
 import { matchField } from './matcher';
@@ -15,6 +16,7 @@ const PAGE_WINDOW = window as typeof window & {
 
 let reviewPanel: ReviewPanel | undefined;
 let totalFilled = 0;
+let aiFilled = 0;
 let needsReview = 0;
 let isFilling = false;
 let fillAgain = false;
@@ -26,6 +28,7 @@ function ensureReviewPanel(): ReviewPanel {
     reviewPanel.onUndo(async () => {
       await restoreAppliedValues();
       totalFilled = 0;
+      aiFilled = 0;
       reviewPanel?.update('Autofill undone', { filled: 0, needsReview: 0 });
     });
   }
@@ -57,7 +60,27 @@ async function runPageFill(): Promise<FillReport> {
     const result = await adapter.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
     totalFilled += result.filled;
     needsReview = result.needsReview;
-    panel.update(totalFilled ? 'Review your highlighted information' : 'Application detected; check highlighted fields', { filled: totalFilled, needsReview });
+
+    let aiError = '';
+    try {
+      if ((await loadSettings()).aiAssistEnabled) {
+        panel.update('Drafting answers to remaining questions with AI…', { filled: totalFilled, needsReview, aiFilled });
+        const aiResult = await runAiAssist(document);
+        totalFilled += aiResult.filled;
+        aiFilled += aiResult.filled;
+        result.filled += aiResult.filled;
+        result.aiFilled = aiResult.filled;
+        aiError = aiResult.error ?? '';
+      }
+    } catch {
+      // AI assist is optional; its failure must not hide what the profile already filled.
+      aiError = 'could not draft answers for the remaining questions.';
+    }
+
+    const status = aiError
+      ? `AI assist: ${aiError}`
+      : totalFilled ? 'Review your highlighted information' : 'Application detected; check highlighted fields';
+    panel.update(status, { filled: totalFilled, needsReview, aiFilled });
     return result;
   } catch {
     needsReview += 1;

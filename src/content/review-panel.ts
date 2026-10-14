@@ -67,7 +67,7 @@ export function mountReviewPanel(doc: Document = document): ReviewPanel {
       if (status) status.textContent = message;
       if (report && detail) {
         detail.textContent = report.filled
-          ? `${report.filled} field${report.filled === 1 ? '' : 's'} filled. ${report.needsReview ? `${report.needsReview} need review. ` : ''}Check the highlighted values; nothing is submitted.`
+          ? `${report.filled} field${report.filled === 1 ? '' : 's'} filled${report.aiFilled ? ` (${report.aiFilled} drafted by AI from your profile; check each one)` : ''}. ${report.needsReview ? `${report.needsReview} need review. ` : ''}Check the highlighted values; nothing is submitted.`
           : `${report.needsReview ? `${report.needsReview} field${report.needsReview === 1 ? '' : 's'} need review. ` : ''}No values were filled. Check your profile and the application fields.`;
       }
     },

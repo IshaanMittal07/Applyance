@@ -19,7 +19,8 @@
     "https://jobs.lever.co/*",
     "https://jobs.ashbyhq.com/*",
     "https://jobs.smartrecruiters.com/*",
-    "https://*.icims.com/*"
+    "https://*.icims.com/*",
+    "https://api.anthropic.com/*"
   ],
   "content_scripts": [
     {
