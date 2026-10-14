@@ -68,32 +68,59 @@ async function setComboboxValue(element: HTMLElement, value: string): Promise<bo
     : element.querySelector<HTMLElement>('button, [role="button"], [aria-haspopup="listbox"], input') ?? element;
   const input = trigger instanceof HTMLInputElement ? trigger : element.querySelector<HTMLInputElement>('input');
   const wasExpanded = trigger.getAttribute('aria-expanded') === 'true';
+  const previousFocus = element.ownerDocument.activeElement;
+  const previousInputValue = input?.value ?? '';
+  const hadRestoreEntry = input ? restoreMap.has(input) : false;
   if (input) {
     setInputValue(input, value);
-    input.focus();
+    input.focus({ preventScroll: true });
   }
   if (!wasExpanded) trigger.click();
 
   const desired = normalizeOption(value);
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    const options = listboxOptions(trigger);
-    const option = options.find((candidate) => normalizeOption(candidate.getAttribute('data-value') ?? '') === desired)
-      ?? options.find((candidate) => normalizeOption(candidate.getAttribute('aria-label') ?? candidate.textContent ?? '') === desired)
-      ?? findUniquePrefix(options, (candidate) => normalizeOption(candidate.getAttribute('aria-label') ?? candidate.textContent ?? ''), desired);
-    if (option) {
-      if (!restoreMap.has(element)) {
-        restoreMap.set(element, input?.value || element.getAttribute('aria-valuetext') || element.textContent?.trim() || '');
+  try {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const options = listboxOptions(trigger);
+      const option = options.find((candidate) => normalizeOption(candidate.getAttribute('data-value') ?? '') === desired)
+        ?? options.find((candidate) => normalizeOption(candidate.getAttribute('aria-label') ?? candidate.textContent ?? '') === desired)
+        ?? findUniquePrefix(options, (candidate) => normalizeOption(candidate.getAttribute('aria-label') ?? candidate.textContent ?? ''), desired);
+      if (option) {
+        if (!restoreMap.has(element)) {
+          restoreMap.set(element, previousInputValue || element.getAttribute('aria-valuetext') || element.textContent?.trim() || '');
+        }
+        option.click();
+        return true;
       }
-      option.click();
-      return true;
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
     }
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 100));
-  }
 
-  const requiresOption = trigger.getAttribute('aria-haspopup') === 'listbox'
-    || element.getAttribute('role') === 'combobox'
-    || element.getAttribute('data-automation-id') === 'selectWidget';
-  return Boolean(input) && !requiresOption;
+    const requiresOption = trigger.getAttribute('aria-haspopup') === 'listbox'
+      || element.getAttribute('role') === 'combobox'
+      || element.getAttribute('data-automation-id') === 'selectWidget';
+    if (input && !requiresOption) return true;
+
+    // No matching option: undo the typed search text and close the list we opened, leaving the field as it was.
+    if (input) {
+      setTextValue(input, previousInputValue);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      if (!hadRestoreEntry) restoreMap.delete(input);
+    }
+    if (!wasExpanded && trigger.getAttribute('aria-expanded') === 'true') {
+      (input ?? trigger).dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      if (trigger.getAttribute('aria-expanded') === 'true') trigger.click();
+    }
+    return false;
+  } finally {
+    // Hand focus back so autofill never leaves the cursor somewhere the user did not put it.
+    const activeElement = element.ownerDocument.activeElement;
+    if (activeElement instanceof HTMLElement && element.contains(activeElement)) {
+      if (previousFocus instanceof HTMLElement && previousFocus !== element.ownerDocument.body && previousFocus.isConnected && !element.contains(previousFocus)) {
+        previousFocus.focus({ preventScroll: true });
+      } else {
+        activeElement.blur();
+      }
+    }
+  }
 }
 
 export async function applyValueToField(element: HTMLElement, value: string): Promise<boolean> {

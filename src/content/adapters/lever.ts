@@ -1,5 +1,5 @@
 import { Profile } from '../../shared/profile-schema';
-import { GenericAdapter } from './generic';
+import { FillOptions, GenericAdapter } from './generic';
 
 export class LeverAdapter extends GenericAdapter {
   public override name = 'lever';
@@ -8,7 +8,7 @@ export class LeverAdapter extends GenericAdapter {
     return url.hostname.includes('lever');
   }
 
-  public override async fillPage(profile: Profile): Promise<{ filled: number; needsReview: number }> {
-    return super.fillPage(profile, { confidenceThreshold: 0.72, onlyFillEmptyFields: true });
+  public override async fillPage(profile: Profile, opts: FillOptions = {}): Promise<{ filled: number; needsReview: number }> {
+    return super.fillPage(profile, { ...opts, confidenceThreshold: 0.72, onlyFillEmptyFields: true });
   }
 }

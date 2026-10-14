@@ -44,26 +44,33 @@ describe('suggestAnswers', () => {
   });
 
   it('sends only non-sensitive fields with structured output and validates the reply', async () => {
-    create.mockResolvedValue(reply(JSON.stringify({ answers: [{ id: 'f0', answer: 'yes', confidence: 'high', basis: 'preference' }, { id: 'f1', answer: 'Male', confidence: 'high', basis: '' }] })));
+    create.mockResolvedValue(reply(JSON.stringify({ answers: { f0: { answer: 'yes', confidence: 'high', basis: 'preference' } } })));
 
-    const result = await suggestAnswers('sk-test', DEFAULT_PROFILE, fields, page);
+    const result = await suggestAnswers('sk-test', DEFAULT_PROFILE, fields, page, 'I prefer hybrid work.');
 
     expect(result).toEqual({ ok: true, answers: { f0: 'Yes' } });
     const params = create.mock.calls[0][0];
     expect(params.model).toBe('claude-opus-5-5');
     expect(params.output_config.format.type).toBe('json_schema');
+    expect(Object.keys(params.output_config.format.schema.properties.answers.properties)).toEqual(['f0']);
     expect(params.fallbacks).toBe('default');
+    expect(params.system[1].text).toContain('I prefer hybrid work.');
+    expect(params.system[1].cache_control).toEqual({ type: 'ephemeral' });
     expect(params.messages[0].content).toContain('Comfortable working hybrid?');
     expect(params.messages[0].content).not.toContain('Gender');
   });
 
   it('splits large forms into batches', async () => {
     const many: AiFieldRequest[] = Array.from({ length: 30 }, (_, index) => ({ id: `f${index}`, label: `Question number ${index}`, kind: 'text' }));
-    create.mockResolvedValue(reply('{"answers":[]}'));
+    const abstainAll = (ids: string[]) => reply(JSON.stringify({ answers: Object.fromEntries(ids.map((id) => [id, { answer: '', confidence: 'low', basis: '' }])) }));
+    create
+      .mockResolvedValueOnce(abstainAll(many.slice(0, 25).map((field) => field.id)))
+      .mockResolvedValueOnce(abstainAll(many.slice(25).map((field) => field.id)));
 
-    await suggestAnswers('sk-test', DEFAULT_PROFILE, many, page);
+    expect(await suggestAnswers('sk-test', DEFAULT_PROFILE, many, page)).toEqual({ ok: true, answers: {} });
 
     expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[0][0].system[1].text).toBe(create.mock.calls[1][0].system[1].text);
   });
 
   it('reports refusals, truncation, and API errors without filling anything', async () => {

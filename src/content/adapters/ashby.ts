@@ -1,5 +1,5 @@
 import { Profile } from '../../shared/profile-schema';
-import { GenericAdapter } from './generic';
+import { FillOptions, GenericAdapter } from './generic';
 
 export class AshbyAdapter extends GenericAdapter {
   public override name = 'ashby';
@@ -8,7 +8,7 @@ export class AshbyAdapter extends GenericAdapter {
     return url.hostname.includes('ashby');
   }
 
-  public override async fillPage(profile: Profile): Promise<{ filled: number; needsReview: number }> {
-    return super.fillPage(profile, { confidenceThreshold: 0.7, onlyFillEmptyFields: true });
+  public override async fillPage(profile: Profile, opts: FillOptions = {}): Promise<{ filled: number; needsReview: number }> {
+    return super.fillPage(profile, { ...opts, confidenceThreshold: 0.7, onlyFillEmptyFields: true });
   }
 }
